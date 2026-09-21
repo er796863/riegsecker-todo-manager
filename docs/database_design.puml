@@ -1,0 +1,41 @@
+@startchen "Database Design"
+    left to right direction
+
+	entity User {
+		UserId : Integer <<key>>
+		Username : String
+		UserFullName : {
+			FirstName : String
+			LastName : String  
+		}
+		UserEmail : String
+		UserPassword : String
+		UserRole : String
+	}
+
+    entity Task {
+        TaskId : Integer <<key>>
+        TaskTitle : String
+        TaskDescription : String
+        TaskDateCreated : DateTime
+        TaskDateDue : DateTime
+    }
+
+    entity Schedule {
+        TaskId : Integer <<key>>
+        UserId : Integer <<key>>
+        NotificationSetting : String
+    }
+
+    relationship Contains {
+    }
+    relationship Owner {
+    }
+    
+
+    Schedule -N- Owner
+    Owner -1- User
+
+    Task -N- Contains 
+    Contains -1- Schedule
+@endchen

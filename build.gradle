@@ -7,7 +7,54 @@ repositories {
 }
 
 dependencies {
-    providedCompile 'jakarta.platform:jakarta.jakartaee-web-api:8.0.0'
+    compileOnly 'jakarta.platform:jakarta.jakartaee-web-api:8.0.0'
     
     testImplementation     'junit:junit:4.13'
+}
+
+def tomcatHome = providers.environmentVariable('CATALINA_HOME').orElse('C:\\apache-tomcat-9.0.113')
+
+tasks.register('deployToTomcat') {
+    dependsOn tasks.named('war')
+    doLast {
+        def webappsDirectory = file("${tomcatHome.get()}\\webapps")
+        copy {
+            from tasks.named('war').get().archiveFile
+            into webappsDirectory
+            rename { 'riegsecker-todo-manager.war' }
+        }
+        println "Deployed riegsecker-todo-manager.war to ${webappsDirectory}"
+    }
+}
+
+tasks.register('runTomcat') {
+    dependsOn tasks.named('deployToTomcat')
+    doLast {
+        exec {
+            workingDir tomcatHome.get()
+            commandLine 'cmd', '/c', 'bin\\catalina.bat', 'run'
+        }
+    }
+}
+
+tasks.register('stopTomcat') {
+    doLast {
+        exec {
+            workingDir tomcatHome.get()
+            ignoreExitValue = true
+            commandLine 'cmd', '/c', 'bin\\shutdown.bat'
+        }
+    }
+}
+
+tasks.register('debugTomcat') {
+    dependsOn tasks.named('stopTomcat'), tasks.named('deployToTomcat')
+    doLast {
+        exec {
+            workingDir tomcatHome.get()
+            environment 'JPDA_ADDRESS', '8000'
+            environment 'JPDA_TRANSPORT', 'dt_socket'
+            commandLine 'cmd', '/c', 'bin\\catalina.bat', 'jpda', 'run'
+        }
+    }
 }

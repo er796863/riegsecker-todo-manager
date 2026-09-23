@@ -50,25 +50,29 @@ tasks.register('deployToTomcat') {
     }
 }
 
-tasks.register('run', Exec) {
+tasks.register('run') {
     group = 'application'
     description = 'Builds, deploys, and starts the web application in Tomcat.'
     dependsOn tasks.named('stopTomcat'), tasks.named('deployToTomcat')
-    def home = requireTomcatHome()
-    workingDir home
     doLast {
-        commandLine 'cmd', '/c', 'bin\\catalina.bat', 'run'
+        def home = requireTomcatHome()
+        exec {
+            workingDir home
+            commandLine 'cmd', '/c', 'bin\\catalina.bat', 'run'
+        }
     }
 }
 
-tasks.register('stopTomcat', Exec) {
+tasks.register('stopTomcat') {
     group = 'application'
     description = 'Stops the configured Tomcat server.'
-    def home = requireTomcatHome()
-    workingDir home
     doLast {
-        ignoreExitValue = true
-        commandLine 'cmd', '/c', 'bin\\shutdown.bat'
+        def home = requireTomcatHome()
+        exec {
+            workingDir home
+            ignoreExitValue = true
+            commandLine 'cmd', '/c', 'bin\\shutdown.bat'
+        }
     }
 }
 

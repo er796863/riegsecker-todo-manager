@@ -6,18 +6,41 @@ repositories {
     mavenCentral()
 }
 
-dependencies {
-    compileOnly 'jakarta.platform:jakarta.jakartaee-web-api:8.0.0'
-    
-    testImplementation     'junit:junit:4.13'
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
 }
 
-def tomcatHome = providers.environmentVariable('CATALINA_HOME').orElse('C:\\apache-tomcat-9.0.113')
+dependencies {
+    compileOnly 'jakarta.platform:jakarta.jakartaee-web-api:8.0.0'
+
+    testImplementation 'junit:junit:4.13.2'
+}
+
+test {
+    useJUnit()
+    group = 'verification'
+    description = 'Runs all automated tests.'
+}
+
+def tomcatHome = providers.environmentVariable('CATALINA_HOME').orElse('C:\\Program Files\\Apache Software Foundation\\Tomcat 9.0')
+
+def requireTomcatHome = {
+    def home = file(tomcatHome.get())
+    def launcher = file("${home}\\bin\\catalina.bat")
+    if (!launcher.isFile()) {
+        throw new GradleException("Tomcat was not found at ${home}. Set CATALINA_HOME to the Tomcat installation directory.")
+    }
+    home
+}
 
 tasks.register('deployToTomcat') {
+    group = 'application'
+    description = 'Builds and deploys the WAR to the configured Tomcat server.'
     dependsOn tasks.named('war')
     doLast {
-        def webappsDirectory = file("${tomcatHome.get()}\\webapps")
+        def webappsDirectory = file("${requireTomcatHome()}\\webapps")
         copy {
             from tasks.named('war').get().archiveFile
             into webappsDirectory
@@ -27,34 +50,28 @@ tasks.register('deployToTomcat') {
     }
 }
 
-tasks.register('runTomcat') {
-    dependsOn tasks.named('deployToTomcat')
-    doLast {
-        exec {
-            workingDir tomcatHome.get()
-            commandLine 'cmd', '/c', 'bin\\catalina.bat', 'run'
-        }
-    }
-}
-
-tasks.register('stopTomcat') {
-    doLast {
-        exec {
-            workingDir tomcatHome.get()
-            ignoreExitValue = true
-            commandLine 'cmd', '/c', 'bin\\shutdown.bat'
-        }
-    }
-}
-
-tasks.register('debugTomcat') {
+tasks.register('run', Exec) {
+    group = 'application'
+    description = 'Builds, deploys, and starts the web application in Tomcat.'
     dependsOn tasks.named('stopTomcat'), tasks.named('deployToTomcat')
+    def home = requireTomcatHome()
+    workingDir home
     doLast {
-        exec {
-            workingDir tomcatHome.get()
-            environment 'JPDA_ADDRESS', '8000'
-            environment 'JPDA_TRANSPORT', 'dt_socket'
-            commandLine 'cmd', '/c', 'bin\\catalina.bat', 'jpda', 'run'
-        }
+        commandLine 'cmd', '/c', 'bin\\catalina.bat', 'run'
     }
+}
+
+tasks.register('stopTomcat', Exec) {
+    group = 'application'
+    description = 'Stops the configured Tomcat server.'
+    def home = requireTomcatHome()
+    workingDir home
+    doLast {
+        ignoreExitValue = true
+        commandLine 'cmd', '/c', 'bin\\shutdown.bat'
+    }
+}
+
+tasks.named('deployToTomcat') {
+    mustRunAfter tasks.named('stopTomcat')
 }

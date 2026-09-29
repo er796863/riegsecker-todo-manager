@@ -20,17 +20,18 @@ public class HelloApi extends HttpServlet {
 
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        String messageParam = "message";
+        String message = "";
         try {
             JsonObject requestBody = JsonParser.parseReader(request.getReader()).getAsJsonObject();
-            String messageParam = "message";
-            String message = requestBody.has(messageParam) && !requestBody.get(messageParam).isJsonNull()
+            message = requestBody.has(messageParam) && !requestBody.get(messageParam).isJsonNull()
                     ? requestBody.get(messageParam).getAsString()
                     : "";
-            sendMessage(response, message);
         } catch (JsonParseException | IllegalStateException exception) {
             response.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             sendMessage(response, "Invalid JSON request");
         }
+        sendMessage(response, message);
     }
 
     private static void sendMessage(HttpServletResponse response, String message) throws IOException {

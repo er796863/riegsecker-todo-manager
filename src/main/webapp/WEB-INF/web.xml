@@ -4,4 +4,21 @@
          xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee http://xmlns.jcp.org/xml/ns/javaee/web-app_4_0.xsd"
          version="4.0">
     <display-name>Riegsecker ToDo Manager</display-name>
+    <servlet>
+        <servlet-name>HelloApi</servlet-name>
+        <servlet-class>controllers.HelloApi</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>HelloApi</servlet-name>
+        <url-pattern>/api/hello</url-pattern>
+    </servlet-mapping>
+    <resource-ref>
+        <description>Docker MySQL todo database</description>
+        <res-ref-name>jdbc/todo_db</res-ref-name>
+        <res-type>javax.sql.DataSource</res-type>
+        <res-auth>Container</res-auth>
+    </resource-ref>
+    <welcome-file-list>
+        <welcome-file>index.html</welcome-file>
+    </welcome-file-list>
 </web-app>

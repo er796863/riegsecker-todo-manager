@@ -15,6 +15,8 @@ java {
 dependencies {
     compileOnly 'jakarta.platform:jakarta.jakartaee-web-api:8.0.0'
 
+    implementation 'com.google.code.gson:gson:2.13.1'
+    providedRuntime 'com.mysql:mysql-connector-j:9.3.0'
     testImplementation 'junit:junit:4.13.2'
 }
 
@@ -40,7 +42,12 @@ tasks.register('deployToTomcat') {
     description = 'Builds and deploys the WAR to the configured Tomcat server.'
     dependsOn tasks.named('war')
     doLast {
-        def webappsDirectory = file("${requireTomcatHome()}\\webapps")
+        def home = requireTomcatHome()
+        def webappsDirectory = file("${home}\\webapps")
+        copy {
+            from configurations.providedRuntime
+            into file("${home}\\lib")
+        }
         copy {
             from tasks.named('war').get().archiveFile
             into webappsDirectory
@@ -56,8 +63,12 @@ tasks.register('run') {
     dependsOn tasks.named('stopTomcat'), tasks.named('deployToTomcat')
     doLast {
         def home = requireTomcatHome()
+        def javaHome = javaToolchains.launcherFor {
+            languageVersion = JavaLanguageVersion.of(17)
+        }.get().metadata.installationPath.asFile
         exec {
             workingDir home
+            environment 'JAVA_HOME', javaHome
             commandLine 'cmd', '/c', 'bin\\catalina.bat', 'run'
         }
     }

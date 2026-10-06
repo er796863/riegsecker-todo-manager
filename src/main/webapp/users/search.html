@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="../shared/entities.css" />
+    <title>Search users</title>
+  </head>
+  <body data-entity="users" data-mode="search" data-label="Users">
+    <header>
+      <a href="../">Home</a>
+      <nav aria-label="User pages">
+        <a href="./index.html">All users</a>
+        <a href="./search.html">Search users</a>
+      </nav>
+    </header>
+    <main>
+      <h1>Search users</h1>
+      <form id="search-form">
+        <label for="search">Search by ID, username, name, email, or role</label><br />
+        <input id="search" name="search" type="search" />
+        <button type="submit">Search</button>
+      </form>
+      <p id="status" role="status" aria-live="polite">Enter a search term.</p>
+      <section id="results" aria-label="Matching users"></section>
+    </main>
+    <script type="module" src="../shared/entities.js"></script>
+  </body>
+</html>

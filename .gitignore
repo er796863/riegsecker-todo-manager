@@ -2,5 +2,6 @@
 .vscode
 .idea
 build
+bin
 *.docx~
 *~$*

@@ -3,7 +3,7 @@ package business;
 import java.io.Serializable;
 import java.time.LocalDateTime;
 
-public class Task  implements Serializable {
+public class Task implements Serializable {
     private Integer taskId;
     private String taskTitle;
     private String taskDescription;

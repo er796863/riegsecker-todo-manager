@@ -1,24 +1,62 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <link rel="stylesheet" href="./homePage/index.css" />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Hello API</title>
+    <script>
+      const path = window.location.pathname;
+      const homePagePath = path.match(/^(.*)\/homePage(?:\/index\.html)?\/?$/);
+      const contextPath = homePagePath ? homePagePath[1] : path.replace(/\/$/, "");
+      window.appContextPath = contextPath;
+      const stylesheet = document.createElement("link");
+      stylesheet.rel = "stylesheet";
+      stylesheet.href = `${contextPath}/shared/entities.css`;
+      document.head.append(stylesheet);
+    </script>
+    <title>ToDo Manager</title>
   </head>
-  <body>
+  <body class="home-page">
     <main>
-      <h1>Hello API</h1>
-      <p id="message">Loading message...</p>
+      <header class="home-header">
+        <p class="eyebrow">PERSONAL ORGANIZATION</p>
+        <h1>ToDo Manager</h1>
+        <p class="intro">Keep tasks, users, and schedules organized in one place.</p>
+      </header>
 
-      <form id="messageForm">
-        <label for="messageInput">Message:</label>
-        <input type="text" id="messageInput" name="message" />
-        <br />
-
-        <input type="submit" value="Test" />
-      </form>
+      <section aria-labelledby="browse-heading">
+        <h2 id="browse-heading">Browse records</h2>
+        <div class="record-links">
+          <a class="record-card" data-app-page="tasks/index.html">
+            <span class="card-icon" aria-hidden="true">T</span>
+            <span class="card-copy">
+              <strong>Tasks</strong>
+              <span>Review task details and find tasks by title or description.</span>
+            </span>
+            <span class="card-arrow" aria-hidden="true">&rarr;</span>
+          </a>
+          <a class="record-card" data-app-page="users/index.html">
+            <span class="card-icon" aria-hidden="true">U</span>
+            <span class="card-copy">
+              <strong>Users</strong>
+              <span>Browse user profiles and search account information.</span>
+            </span>
+            <span class="card-arrow" aria-hidden="true">&rarr;</span>
+          </a>
+          <a class="record-card" data-app-page="schedules/index.html">
+            <span class="card-icon" aria-hidden="true">S</span>
+            <span class="card-copy">
+              <strong>Schedules</strong>
+              <span>Explore task assignments and notification settings.</span>
+            </span>
+            <span class="card-arrow" aria-hidden="true">&rarr;</span>
+          </a>
+        </div>
+      </section>
     </main>
-    <script type="module" src="./homePage/index.js"></script>
+    <script>
+      document.querySelectorAll("[data-app-page]").forEach((link) => {
+        link.href = `${window.appContextPath}/${link.dataset.appPage}`;
+      });
+    </script>
   </body>
 </html>

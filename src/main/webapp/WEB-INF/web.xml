@@ -5,12 +5,12 @@
          version="4.0">
     <display-name>Riegsecker ToDo Manager</display-name>
     <servlet>
-        <servlet-name>HelloApi</servlet-name>
-        <servlet-class>controllers.HelloApi</servlet-class>
+        <servlet-name>BusinessApi</servlet-name>
+        <servlet-class>controllers.BusinessApi</servlet-class>
     </servlet>
     <servlet-mapping>
-        <servlet-name>HelloApi</servlet-name>
-        <url-pattern>/api/hello</url-pattern>
+        <servlet-name>BusinessApi</servlet-name>
+        <url-pattern>/api/business/*</url-pattern>
     </servlet-mapping>
     <resource-ref>
         <description>Docker MySQL todo database</description>

@@ -57,6 +57,16 @@ Builds the WAR, stops any running Tomcat instance to prevent port conflicts, dep
 ```
 Open the application in your browser: [http://localhost:8080/riegsecker-todo-manager/](http://localhost:8080/riegsecker-todo-manager/)
 
+## Browsing Records
+
+The home page links to read-only list, detail, and search pages for tasks, users, and schedules. The corresponding API uses GET requests:
+
+- `/api/business/tasks` — list tasks; `?id=<taskId>` retrieves one task and `?search=<term>` searches IDs, titles, and descriptions.
+- `/api/business/users` — list users; `?id=<userId>` retrieves one user and `?search=<term>` searches IDs, usernames, names, email addresses, and roles.
+- `/api/business/schedules` — list schedules; `?taskId=<taskId>&userId=<userId>` retrieves one schedule and `?search=<term>` searches task IDs, user IDs, and notification settings.
+
+User responses intentionally omit password hashes.
+
 ### Stop Application
 Stop the running Tomcat server at any time with `Ctrl+C` in the running terminal, or execute:
 ```powershell

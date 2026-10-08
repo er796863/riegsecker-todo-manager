@@ -211,16 +211,21 @@ async function loadDetails() {
     setStatus(`${label} details loaded.`);
 }
 
+/**
+ * Main entry point for pages that render entities.
+ *
+ * @returns {Promise<void>}
+ */
 async function main() {
     if (mode === "list") {
         try {
-            await loadList(null)
+            await loadList(null);
         } catch (error) {
             setStatus(error.message, "error");
         }
     } else if (mode === "detail") {
         try {
-            await loadDetails()
+            await loadDetails();
         } catch (error) {
             setStatus(error.message, "error");
         }
@@ -233,7 +238,7 @@ async function main() {
             input.value = initialSearch;
 
             try {
-                await loadList(initialSearch)
+                await loadList(initialSearch);
             } catch (error) {
                 setStatus(error.message, "error");
             }
@@ -247,7 +252,7 @@ async function main() {
             history.replaceState(null, "", `?${params}`);
 
             try {
-                await loadList(search)
+                await loadList(search);
             } catch (error) {
                 setStatus(error.message, "error");
             }

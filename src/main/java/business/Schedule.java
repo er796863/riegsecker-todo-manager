@@ -1,35 +1,20 @@
 package business;
 
 import java.io.Serializable;
+import java.util.Map;
 
-public class Schedule implements Serializable  {
-    private Integer taskId;
-    private Integer userId;
+public class Schedule implements Serializable {
     private String notificationSettings;
+    private Map<Integer, Task> tasks;
+    private User user;
 
     public Schedule() {
     }
 
-    public Schedule(Integer taskId, Integer userId, String notificationSettings) {
-        this.taskId = taskId;
-        this.userId = userId;
+    public Schedule(String notificationSettings, Map<Integer, Task> tasks, User user) {
         this.notificationSettings = notificationSettings;
-    }
-
-    public Integer getTaskId() {
-        return taskId;
-    }
-
-    public void setTaskId(Integer taskId) {
-        this.taskId = taskId;
-    }
-
-    public Integer getUserId() {
-        return userId;
-    }
-
-    public void setUserId(Integer userId) {
-        this.userId = userId;
+        this.tasks = tasks;
+        this.user = user;
     }
 
     public String getNotificationSettings() {
@@ -38,5 +23,21 @@ public class Schedule implements Serializable  {
 
     public void setNotificationSettings(String notificationSettings) {
         this.notificationSettings = notificationSettings;
+    }
+
+    public Map<Integer, Task> getTasks() {
+        return tasks;
+    }
+
+    public void setTasks(Map<Integer, Task> tasks) {
+        this.tasks = tasks;
+    }
+
+    public User getUser() {
+        return user;
+    }
+
+    public void setUser(User user) {
+        this.user = user;
     }
 }

@@ -1,0 +1,9 @@
+services:
+  mysql-gui:
+    volumes:
+      - type: bind
+        source: ./phpMyAdminDarkMode
+        target: /var/www/html/themes/phpMyAdminDarkMode
+        read_only: true
+        bind:
+          create_host_path: false

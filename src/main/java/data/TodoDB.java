@@ -1,173 +1,321 @@
 package data;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-
-import javax.naming.NamingException;
-
 import business.Schedule;
 import business.Task;
 import business.User;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.function.BiConsumer;
+import java.util.function.ToIntFunction;
+
+import javax.naming.NamingException;
+
 public class TodoDB {
+    // language=MySQL
+    private static final String BASE_TASKS_QUERY = "SELECT task_id, task_title, task_description, date_created, date_due FROM tasks";
+
+    // language=MySQL
+    private static final String SELECT_TASK_QUERY = BASE_TASKS_QUERY + " WHERE task_id = ?";
+
+    // language=MySQL
+    private static final String SELECT_TASKS_QUERY = BASE_TASKS_QUERY + " ORDER BY task_id";
+
+    // language=MySQL
+    private static final String SEARCH_TASKS_QUERY = BASE_TASKS_QUERY
+            + " WHERE CONCAT_WS(' ', CAST(task_id AS CHAR), task_title, task_description) LIKE ? ORDER BY task_id";
+
+    private static final String BASE_USERS_QUERY = "SELECT user_id, username, first_name, last_name, email, user_role FROM users";
+    // language=MySQL
+    private static final String SELECT_USER_QUERY = BASE_USERS_QUERY + " WHERE user_id = ?";
+
+    // language=MySQL
+    private static final String SELECT_USERS_QUERY = BASE_USERS_QUERY + " ORDER BY user_id";
+
+    // language=MySQL
+    private static final String SEARCH_USERS_QUERY = BASE_USERS_QUERY
+            + " WHERE CONCAT_WS(' ', username, first_name, last_name) LIKE ? ORDER BY user_id";
+
+    // language=MySQL
+    private static final String SCHEDULES_BASE_QUERY = "SELECT s.notification_setting AS notificationSettings, "
+            + "u.user_id, u.username, u.first_name, u.last_name, u.email, u.user_role, "
+            + "t.task_id, t.task_title, t.task_description, t.date_created, t.date_due "
+            + "FROM schedules s JOIN users u ON s.user_id = u.user_id "
+            + "LEFT JOIN schedule_tasks st ON s.schedule_id = st.schedule_id "
+            + "LEFT JOIN tasks t ON st.task_id = t.task_id";
+
+    // language=MySQL
+    private static final String SELECT_SCHEDULES_QUERY = SCHEDULES_BASE_QUERY
+            + " ORDER BY u.user_id, t.task_id";
+
+    // language=MySQL
+    private static final String SELECT_SCHEDULE_QUERY = SCHEDULES_BASE_QUERY
+            + " WHERE s.user_id = ? ORDER BY t.task_id";
+
+    // language=MySQL
+    private static final String SEARCH_SCHEDULES_QUERY = SCHEDULES_BASE_QUERY
+            + " WHERE CONCAT_WS(' ', CAST(s.user_id AS CHAR), s.notification_setting, "
+            + "u.username, u.first_name, u.last_name, "
+            + "t.task_title, t.task_description) LIKE ? ORDER BY u.user_id, t.task_id";
+
+    /**
+     * Prevents instantiation of this database utility class.
+     */
     private TodoDB() {
         /* This utility class should not be instantiated */
     }
 
+    /**
+     * Maps a result-set row to an entity.
+     */
+    private interface RowMapper<T> {
+        /**
+         * Builds an entity from the current result-set row.
+         */
+        T mapRow(ResultSet rs) throws SQLException;
+    }
+
+    /**
+     * Builds an insertion-ordered map of entities from a query.
+     */
+    private static <T> Map<Integer, T> buildEntities(PreparedStatement ps, RowMapper<T> mapper, ToIntFunction<T> getId)
+            throws SQLException {
+        return buildEntities(ps, mapper, getId, (existing, incoming) -> {
+        });
+    }
+
+    /**
+     * Builds an insertion-ordered map and merges rows with duplicate entity IDs.
+     */
+    private static <T> Map<Integer, T> buildEntities(PreparedStatement ps, RowMapper<T> mapper,
+            ToIntFunction<T> getId, BiConsumer<T, T> merge) throws SQLException {
+        try (ResultSet rs = ps.executeQuery()) {
+            LinkedHashMap<Integer, T> entities = new LinkedHashMap<>();
+            while (rs.next()) {
+                T entity = mapper.mapRow(rs);
+                Integer id = getId.applyAsInt(entity);
+                T existing = entities.putIfAbsent(id, entity);
+                if (existing != null) {
+                    merge.accept(existing, entity);
+                }
+            }
+            return entities;
+        }
+    }
+
+    /**
+     * Selects one entity by ID.
+     */
+    private static <T> T selectEntity(Integer id, String query, RowMapper<T> mapper, ToIntFunction<T> getId)
+            throws NamingException, SQLException {
+        ConnectionPool pool = ConnectionPool.getInstance();
+        try (Connection connection = pool.getConnection(); PreparedStatement ps = connection.prepareStatement(query)) {
+            ps.setObject(1, id);
+            return buildEntities(ps, mapper, getId).get(id);
+        }
+    }
+
+    /**
+     * Selects one entity by ID and merges rows that share its ID.
+     */
+    private static <T> T selectEntity(Integer id, String query, RowMapper<T> mapper, ToIntFunction<T> getId,
+            BiConsumer<T, T> merge) throws NamingException, SQLException {
+        ConnectionPool pool = ConnectionPool.getInstance();
+        try (Connection connection = pool.getConnection(); PreparedStatement ps = connection.prepareStatement(query)) {
+            ps.setObject(1, id);
+            return buildEntities(ps, mapper, getId, merge).get(id);
+        }
+    }
+
+    /**
+     * Selects all entities returned by a query.
+     */
+    private static <T> Map<Integer, T> selectEntities(String query, RowMapper<T> mapper, ToIntFunction<T> getId)
+            throws NamingException, SQLException {
+        ConnectionPool pool = ConnectionPool.getInstance();
+        try (Connection connection = pool.getConnection(); PreparedStatement ps = connection.prepareStatement(query)) {
+            return buildEntities(ps, mapper, getId);
+        }
+    }
+
+    /**
+     * Selects entities and merges rows that share an entity ID.
+     */
+    private static <T> Map<Integer, T> selectEntities(String query, RowMapper<T> mapper, ToIntFunction<T> getId,
+            BiConsumer<T, T> merge) throws NamingException, SQLException {
+        ConnectionPool pool = ConnectionPool.getInstance();
+        try (Connection connection = pool.getConnection(); PreparedStatement ps = connection.prepareStatement(query)) {
+            return buildEntities(ps, mapper, getId, merge);
+        }
+    }
+
+    /**
+     * Searches for entities, falling back to the full query for a blank search.
+     */
+    private static <T> Map<Integer, T> searchEntities(String search, String query, String fallbackQuery,
+            RowMapper<T> mapper, ToIntFunction<T> getId) throws NamingException, SQLException {
+        if (search == null || search.isBlank()) {
+            return selectEntities(fallbackQuery, mapper, getId);
+        }
+
+        ConnectionPool pool = ConnectionPool.getInstance();
+        try (Connection connection = pool.getConnection(); PreparedStatement ps = connection.prepareStatement(query)) {
+            ps.setString(1, "%" + search.trim() + "%");
+            return buildEntities(ps, mapper, getId);
+        }
+    }
+
+    /**
+     * Searches for entities and merges rows that share an entity ID.
+     */
+    private static <T> Map<Integer, T> searchEntities(String search, String query, String fallbackQuery,
+            RowMapper<T> mapper, ToIntFunction<T> getId, BiConsumer<T, T> merge)
+            throws NamingException, SQLException {
+        if (search == null || search.isBlank()) {
+            return selectEntities(fallbackQuery, mapper, getId, merge);
+        }
+
+        ConnectionPool pool = ConnectionPool.getInstance();
+        try (Connection connection = pool.getConnection(); PreparedStatement ps = connection.prepareStatement(query)) {
+            ps.setString(1, "%" + search.trim() + "%");
+            return buildEntities(ps, mapper, getId, merge);
+        }
+    }
+
+    /**
+     * Builds a task from the current result-set row.
+     */
+    private static Task buildTask(ResultSet rs) throws SQLException {
+        Integer taskId = rs.getInt("task_id");
+        String taskTitle = rs.getString("task_title");
+        String taskDescription = rs.getString("task_description");
+        LocalDateTime taskDateCreated = toLocalDateTime(rs.getTimestamp("date_created"));
+        LocalDateTime taskDateDue = toLocalDateTime(rs.getTimestamp("date_due"));
+
+        return new Task(taskId, taskTitle, taskDescription, taskDateCreated, taskDateDue);
+    }
+
+    /**
+     * Selects a task by ID.
+     */
+    public static Task selectTask(Integer id) throws NamingException, SQLException {
+        return selectEntity(id, SELECT_TASK_QUERY, TodoDB::buildTask, Task::getTaskId);
+    }
+
+    /**
+     * Selects all tasks, keyed by task ID.
+     */
     public static Map<Integer, Task> selectTasks() throws NamingException, SQLException {
-        return queryTasks("SELECT * FROM tasks", null);
+        return selectEntities(SELECT_TASKS_QUERY, TodoDB::buildTask, Task::getTaskId);
     }
 
-    public static Task selectTask(Integer taskId) throws NamingException, SQLException {
-        Map<Integer, Task> tasks = queryTasks("SELECT * FROM tasks WHERE task_id = ?", taskId);
-        return tasks.get(taskId);
+    /**
+     * Searches for tasks, keyed by task ID.
+     */
+    public static Map<Integer, Task> searchTasks(String search) throws NamingException, SQLException {
+        return searchEntities(search, SEARCH_TASKS_QUERY, SELECT_TASKS_QUERY, TodoDB::buildTask, Task::getTaskId);
     }
 
-    public static List<Task> searchTasks(String search) throws NamingException, SQLException {
-        if (search == null || search.isBlank()) {
-            return new ArrayList<>(selectTasks().values());
+    /**
+     * Builds a user from the current result-set row.
+     */
+    private static User buildUser(ResultSet rs) throws SQLException {
+        Integer userId = rs.getInt("user_id");
+        String username = rs.getString("username");
+        String firstName = rs.getString("first_name");
+        String lastName = rs.getString("last_name");
+        String email = rs.getString("email");
+        String userRole = rs.getString("user_role");
+
+        return new User(userId, username, firstName, lastName, email, null, userRole);
+    }
+
+    /**
+     * Selects a user by ID.
+     */
+    public static User selectUser(Integer id) throws NamingException, SQLException {
+        return selectEntity(id, SELECT_USER_QUERY, TodoDB::buildUser, User::getUserId);
+    }
+
+    /**
+     * Selects all users, keyed by user ID.
+     */
+    public static Map<Integer, User> selectUsers() throws NamingException, SQLException {
+        return selectEntities(SELECT_USERS_QUERY, TodoDB::buildUser, User::getUserId);
+    }
+
+    /**
+     * Searches for users, keyed by user ID.
+     */
+    public static Map<Integer, User> searchUsers(String search) throws NamingException, SQLException {
+        return searchEntities(search, SEARCH_USERS_QUERY, SELECT_USERS_QUERY, TodoDB::buildUser, User::getUserId);
+    }
+
+    /**
+     * Builds a schedule and its task map from the current result-set row.
+     */
+    private static Schedule buildSchedule(ResultSet rs) throws SQLException {
+        User user = buildUser(rs);
+        Map<Integer, Task> tasks = new LinkedHashMap<>();
+
+        Integer taskId = rs.getObject("task_id", Integer.class);
+        if (taskId != null) {
+            Task task = buildTask(rs);
+            tasks.put(taskId, task);
         }
-        String query = "SELECT * FROM tasks WHERE CAST(task_id AS CHAR) LIKE ? "
-                + "OR task_title LIKE ? OR task_description LIKE ?";
-        return new ArrayList<>(queryTasks(query, "%" + search.trim() + "%").values());
+        String notificationSettings = rs.getString("notificationSettings");
+
+        return new Schedule(notificationSettings, tasks, user);
     }
 
-    private static Map<Integer, Task> queryTasks(String query, Object parameter)
-            throws NamingException, SQLException {
-        ConnectionPool pool = ConnectionPool.getInstance();
-        Connection connection = pool.getConnection();
-        try (PreparedStatement ps = connection.prepareStatement(query)) {
-            if (parameter instanceof String search) {
-                for (int index = 1; index <= 3; index++) {
-                    ps.setString(index, search);
-                }
-            } else if (parameter != null) {
-                ps.setObject(1, parameter);
-            }
-            try (ResultSet rs = ps.executeQuery()) {
-                LinkedHashMap<Integer, Task> tasks = new LinkedHashMap<>();
-                while (rs.next()) {
-                    Integer taskId = rs.getInt("task_id");
-                    String taskTitle = rs.getString("task_title");
-                    String taskDescription = rs.getString("task_description");
-                    LocalDateTime dateCreated = toLocalDateTime(rs.getTimestamp("date_created"));
-                    LocalDateTime dateDue = toLocalDateTime(rs.getTimestamp("date_due"));
-
-                    Task task = new Task(taskId, taskTitle, taskDescription, dateCreated, dateDue);
-                    tasks.put(taskId, task);
-                }
-                return tasks;
-            }
-        } finally {
-            pool.freeConnection(connection);
-        }
+    /**
+     * Adds the incoming schedule's tasks to the existing schedule.
+     */
+    private static void mergeScheduleTasks(Schedule existing, Schedule incoming) {
+        existing.getTasks().putAll(incoming.getTasks());
     }
 
-    public static List<User> selectUsers() throws NamingException, SQLException {
-        return queryUsers("SELECT user_id, username, first_name, last_name, email, user_role FROM users",
-                null).values().stream().toList();
+    /**
+     * Returns the user ID used to key a schedule.
+     */
+    private static int scheduleUserId(Schedule schedule) {
+        return schedule.getUser().getUserId();
     }
 
-    public static User selectUser(Integer userId) throws NamingException, SQLException {
-        Map<Integer, User> users = queryUsers(
-                "SELECT user_id, username, first_name, last_name, email, user_role FROM users WHERE user_id = ?",
-                userId);
-        return users.get(userId);
+    /**
+     * Selects all schedules, keyed by user ID.
+     */
+    public static Map<Integer, Schedule> selectSchedules() throws NamingException, SQLException {
+        return selectEntities(SELECT_SCHEDULES_QUERY, TodoDB::buildSchedule, TodoDB::scheduleUserId,
+                TodoDB::mergeScheduleTasks);
     }
 
-    public static List<User> searchUsers(String search) throws NamingException, SQLException {
-        if (search == null || search.isBlank()) {
-            return selectUsers();
-        }
-        String query = "SELECT user_id, username, first_name, last_name, email, user_role FROM users "
-                + "WHERE CAST(user_id AS CHAR) LIKE ? OR username LIKE ? OR first_name LIKE ? "
-                + "OR last_name LIKE ? OR email LIKE ? OR user_role LIKE ?";
-        return new ArrayList<>(queryUsers(query, "%" + search.trim() + "%").values());
+    /**
+     * Selects the schedule belonging to a user.
+     */
+    public static Schedule selectSchedule(Integer userId) throws NamingException, SQLException {
+        return selectEntity(userId, SELECT_SCHEDULE_QUERY, TodoDB::buildSchedule,
+                TodoDB::scheduleUserId, TodoDB::mergeScheduleTasks);
     }
 
-    private static Map<Integer, User> queryUsers(String query, Object parameter)
-            throws NamingException, SQLException {
-        ConnectionPool pool = ConnectionPool.getInstance();
-        Connection connection = pool.getConnection();
-        try (PreparedStatement ps = connection.prepareStatement(query)) {
-            if (parameter instanceof String search) {
-                for (int index = 1; index <= 6; index++) {
-                    ps.setString(index, search);
-                }
-            } else if (parameter != null) {
-                ps.setObject(1, parameter);
-            }
-            try (ResultSet rs = ps.executeQuery()) {
-                LinkedHashMap<Integer, User> users = new LinkedHashMap<>();
-                while (rs.next()) {
-                    Integer userId = rs.getInt("user_id");
-                    User user = new User(userId, rs.getString("username"), rs.getString("first_name"),
-                            rs.getString("last_name"), rs.getString("email"), null, rs.getString("user_role"));
-                    users.put(userId, user);
-                }
-                return users;
-            }
-        } finally {
-            pool.freeConnection(connection);
-        }
+    /**
+     * Searches for schedules, keyed by user ID.
+     */
+    public static Map<Integer, Schedule> searchSchedules(String search) throws NamingException, SQLException {
+        return searchEntities(search, SEARCH_SCHEDULES_QUERY, SELECT_SCHEDULES_QUERY,
+                TodoDB::buildSchedule, TodoDB::scheduleUserId, TodoDB::mergeScheduleTasks);
     }
 
-    public static List<Schedule> selectSchedules() throws NamingException, SQLException {
-        return querySchedules("SELECT task_id, user_id, notification_setting FROM schedules", null);
-    }
-
-    public static Schedule selectSchedule(Integer taskId, Integer userId)
-            throws NamingException, SQLException {
-        List<Schedule> schedules = querySchedules(
-                "SELECT task_id, user_id, notification_setting FROM schedules WHERE task_id = ? AND user_id = ?",
-                new Integer[] {taskId, userId});
-        return schedules.isEmpty() ? null : schedules.get(0);
-    }
-
-    public static List<Schedule> searchSchedules(String search) throws NamingException, SQLException {
-        if (search == null || search.isBlank()) {
-            return selectSchedules();
-        }
-        String query = "SELECT task_id, user_id, notification_setting FROM schedules "
-                + "WHERE CAST(task_id AS CHAR) LIKE ? OR CAST(user_id AS CHAR) LIKE ? "
-                + "OR notification_setting LIKE ?";
-        return querySchedules(query, "%" + search.trim() + "%");
-    }
-
-    private static List<Schedule> querySchedules(String query, Object parameter)
-            throws NamingException, SQLException {
-        ConnectionPool pool = ConnectionPool.getInstance();
-        Connection connection = pool.getConnection();
-        try (PreparedStatement ps = connection.prepareStatement(query)) {
-            if (parameter instanceof String search) {
-                for (int index = 1; index <= 3; index++) {
-                    ps.setString(index, search);
-                }
-            } else if (parameter instanceof Integer[] ids) {
-                ps.setInt(1, ids[0]);
-                ps.setInt(2, ids[1]);
-            }
-            try (ResultSet rs = ps.executeQuery()) {
-                List<Schedule> schedules = new ArrayList<>();
-                while (rs.next()) {
-                    schedules.add(new Schedule(rs.getInt("task_id"), rs.getInt("user_id"),
-                            rs.getString("notification_setting")));
-                }
-                return schedules;
-            }
-        } finally {
-            pool.freeConnection(connection);
-        }
-    }
-
-    private static LocalDateTime toLocalDateTime(java.sql.Timestamp timestamp) {
+    /**
+     * Converts a nullable SQL timestamp to a local date-time.
+     */
+    private static LocalDateTime toLocalDateTime(Timestamp timestamp) {
         return timestamp == null ? null : timestamp.toLocalDateTime();
     }
 }

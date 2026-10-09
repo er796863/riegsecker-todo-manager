@@ -22,10 +22,31 @@ A simple web application for creating, organizing, and tracking personal tasks.
 
 The development environment uses MySQL with phpMyAdmin. Database schema and seed data in `docker/mysql/init/001_schema_and_seed.sql` initialize automatically on first launch.
 
+Schedules contain one user, a map of that user's tasks, and one notification
+setting. On an existing database, apply the schedule-only migration once; it
+recreates and reseeds schedule assignments while preserving users and tasks:
+
+```bash
+docker compose exec -T db mysql -u todo_user -ptodo_password todo_db < docker/mysql/migrations/002_user_schedules.sql
+```
+
 ### Start Database
 ```bash
 docker compose up -d
 ```
+
+To install the optional local phpMyAdmin dark theme, place its theme files in
+the git-ignored `phpMyAdminDarkMode` folder at the repository root, then
+recreate the phpMyAdmin container with the dark-theme override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.darkmode.yml up -d --force-recreate mysql-gui
+```
+
+Restarting a container started without this override does not add the theme
+mount. After recreating it, sign in to phpMyAdmin and select **BooDark** under
+**Settings → Appearance settings → Theme**. The standard
+`docker compose up -d` command does not require the theme folder.
 
 ### Access Database & Management GUI
 - **phpMyAdmin Web UI:** [http://localhost:8081](http://localhost:8081)

@@ -22,17 +22,27 @@ CREATE TABLE IF NOT EXISTS tasks (
 ) ENGINE = InnoDB;
 
 CREATE TABLE IF NOT EXISTS schedules (
-    task_id INT UNSIGNED NOT NULL,
+    schedule_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     user_id INT UNSIGNED NOT NULL,
     notification_setting VARCHAR(30) NOT NULL DEFAULT 'NONE',
-    PRIMARY KEY (task_id, user_id),
-    KEY idx_schedules_user_id (user_id),
-    CONSTRAINT fk_schedules_task
-        FOREIGN KEY (task_id) REFERENCES tasks (task_id)
-        ON UPDATE CASCADE
-        ON DELETE CASCADE,
+    PRIMARY KEY (schedule_id),
+    UNIQUE KEY uq_schedules_user_id (user_id),
     CONSTRAINT fk_schedules_user
         FOREIGN KEY (user_id) REFERENCES users (user_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+) ENGINE = InnoDB;
+
+CREATE TABLE IF NOT EXISTS schedule_tasks (
+    schedule_id INT UNSIGNED NOT NULL,
+    task_id INT UNSIGNED NOT NULL,
+    PRIMARY KEY (schedule_id, task_id),
+    CONSTRAINT fk_schedule_tasks_schedule
+        FOREIGN KEY (schedule_id) REFERENCES schedules (schedule_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_schedule_tasks_task
+        FOREIGN KEY (task_id) REFERENCES tasks (task_id)
         ON UPDATE CASCADE
         ON DELETE CASCADE
 ) ENGINE = InnoDB;
@@ -59,15 +69,26 @@ VALUES
      '2026-09-22 11:00:00', '2026-10-09 15:00:00')
 ON DUPLICATE KEY UPDATE task_title = VALUES(task_title);
 
-INSERT INTO schedules (task_id, user_id, notification_setting)
-SELECT t.task_id, u.user_id, assignments.notification_setting
+INSERT INTO schedules (user_id, notification_setting)
+SELECT u.user_id, user_schedules.notification_setting
 FROM (
-    SELECT 'Review project requirements' AS task_title, 'emorgan' AS username, 'DAILY' AS notification_setting
-    UNION ALL SELECT 'Create database schema', 'emorgan', 'DAILY'
-    UNION ALL SELECT 'Create database schema', 'jchen', 'WEEKLY'
-    UNION ALL SELECT 'Test login workflow', 'jchen', 'AT_DUE'
-    UNION ALL SELECT 'Prepare project demonstration', 'admin', 'DAILY'
+    SELECT 'emorgan' AS username, 'DAILY' AS notification_setting
+    UNION ALL SELECT 'jchen', 'WEEKLY'
+    UNION ALL SELECT 'admin', 'DAILY'
+) AS user_schedules
+JOIN users AS u ON u.username = user_schedules.username
+ON DUPLICATE KEY UPDATE notification_setting = VALUES(notification_setting);
+
+INSERT INTO schedule_tasks (schedule_id, task_id)
+SELECT s.schedule_id, t.task_id
+FROM (
+    SELECT 'Review project requirements' AS task_title, 'emorgan' AS username
+    UNION ALL SELECT 'Create database schema', 'emorgan'
+    UNION ALL SELECT 'Create database schema', 'jchen'
+    UNION ALL SELECT 'Test login workflow', 'jchen'
+    UNION ALL SELECT 'Prepare project demonstration', 'admin'
 ) AS assignments
 JOIN tasks AS t ON t.task_title = assignments.task_title
 JOIN users AS u ON u.username = assignments.username
-ON DUPLICATE KEY UPDATE notification_setting = VALUES(notification_setting);
+JOIN schedules AS s ON s.user_id = u.user_id
+ON DUPLICATE KEY UPDATE task_id = VALUES(task_id);

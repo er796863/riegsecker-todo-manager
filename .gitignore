@@ -3,6 +3,7 @@
 .idea
 build
 bin
+node_modules
 phpMyAdminDarkMode
 *.docx~
 *~$*

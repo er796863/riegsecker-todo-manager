@@ -104,10 +104,24 @@ To redeploy changes without restarting Tomcat while the server is actively runni
 
 ## Running Automated Tests
 
-Run the full automated test suite:
+Run the Java unit tests (JUnit 4) with Gradle:
 ```powershell
 ./gradlew.bat test
 ```
+
+The browser JavaScript also has a Vitest suite using jsdom; it tests the plain
+HTML/JavaScript pages without React or a running application server. Vitest 5
+requires Node.js 22.12.x, 24.x, or 26+. Install the Node.js dependencies once,
+then run the tests:
+
+```powershell
+npm install
+npm test
+```
+
+Use `npm run test:watch` during development to rerun the browser tests as files
+change. Check the shared browser JavaScript and record types with
+`npm run check:types`.
 
 ---
 

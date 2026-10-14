@@ -60,19 +60,19 @@ public class BusinessApi extends HttpServlet {
         return path.substring(start, end);
     }
 
-    private interface ExceptionThrowingFunction<K, T> {
+    private interface EntityFunctionWithArg<K, T> {
         T apply(K input) throws NamingException, SQLException;
     }
 
-    private interface EntitySupplier<T> {
+    private interface EntityFunctionNoArg<T> {
         Map<Integer, T> apply() throws NamingException, SQLException;
     }
 
     private record EntityOperations<T>(
             String type,
-            ExceptionThrowingFunction<Integer, T> selectEntity,
-            EntitySupplier<T> selectEntities,
-            ExceptionThrowingFunction<String, Map<Integer, T>> searchEntities,
+            EntityFunctionWithArg<Integer, T> selectEntity,
+            EntityFunctionNoArg<T> selectEntities,
+            EntityFunctionWithArg<String, Map<Integer, T>> searchEntities,
             Function<T, Map<String, Object>> toJson) {
     }
 

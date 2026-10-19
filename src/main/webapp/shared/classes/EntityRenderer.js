@@ -73,7 +73,8 @@ export class EntityRenderer {
 
 		if (this.entity === "schedules") {
 			const schedule = /** @type {ScheduleRecord} */ (record);
-			const { firstName, lastName, userName, email, role } = schedule.user;
+			const { firstName, lastName, userName, email, role } =
+				schedule.user;
 			this.results.append(
 				this.createScheduleDetailCard(
 					`${firstName} ${lastName} (@${userName})`,
@@ -145,9 +146,11 @@ export class EntityRenderer {
 
 		const cards = document.createElement("div");
 		cards.className = "schedule-group-cards";
+
 		for (const task of Object.values(schedule.tasks)) {
 			cards.append(this.createRecordCard(schedule, task));
 		}
+
 		group.append(cards);
 		return group;
 	}
@@ -160,6 +163,7 @@ export class EntityRenderer {
 	createRecordCard(record, scheduleTask) {
 		const article = document.createElement("article");
 		const heading = document.createElement("h2");
+
 		heading.textContent = this.recordHeading(record, scheduleTask);
 		article.append(heading);
 
@@ -170,6 +174,7 @@ export class EntityRenderer {
 		const link = document.createElement("a");
 		link.href = this.detailUrl(record);
 		link.textContent = `View ${this.label.toLowerCase()} details`;
+
 		article.append(link);
 		return article;
 	}
@@ -183,14 +188,17 @@ export class EntityRenderer {
 		if (this.entity === "tasks") {
 			return /** @type {TaskRecord} */ (record).taskTitle;
 		}
+
 		if (this.entity === "users") {
 			const { firstName, lastName, userName } =
 				/** @type {UserRecord} */ (record);
 			return `${firstName} ${lastName} (@${userName})`;
 		}
+
 		if (!scheduleTask) {
 			throw new Error("A task is required to render a schedule entry.");
 		}
+
 		return scheduleTask.taskTitle;
 	}
 
@@ -203,9 +211,11 @@ export class EntityRenderer {
 			const { email, role } = /** @type {UserRecord} */ (record);
 			return `${email} · ${role}`;
 		}
+
 		if (this.entity === "tasks") {
 			return `Due: ${this.displayValue(/** @type {TaskRecord} */ (record).taskDateDue)}`;
 		}
+
 		return `Notification: ${/** @type {ScheduleRecord} */ (record).notificationSettings}`;
 	}
 
@@ -234,13 +244,17 @@ export class EntityRenderer {
 	 */
 	addDetails(container, record) {
 		const details = document.createElement("dl");
+
 		for (const [key, value] of Object.entries(record)) {
 			const term = document.createElement("dt");
 			const description = document.createElement("dd");
+
 			term.textContent = this.fieldLabel(key);
 			description.textContent = this.displayValue(value);
+
 			details.append(term, description);
 		}
+
 		container.append(details);
 	}
 
@@ -262,8 +276,10 @@ export class EntityRenderer {
 	 */
 	fieldLabel(name) {
 		let label = "";
+
 		for (let i = 0; i < name.length; i++) {
 			const char = name[i];
+
 			if (i === 0) {
 				label += char.toUpperCase();
 			} else if (char === char.toUpperCase()) {
@@ -272,6 +288,7 @@ export class EntityRenderer {
 				label += char;
 			}
 		}
+
 		return label.trim();
 	}
 }

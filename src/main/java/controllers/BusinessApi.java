@@ -26,7 +26,7 @@ public class BusinessApi extends HttpServlet {
     private static final String SCHEDULES = "schedules";
 
     @Override
-    protected void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException {
+    protected void doGet(HttpServletRequest request, HttpServletResponse response) {
         String path = request.getPathInfo();
         String entity = path == null ? "" : determineEntityFromPath(path);
         String search = request.getParameter("search");

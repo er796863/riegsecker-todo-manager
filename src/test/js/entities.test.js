@@ -13,6 +13,19 @@ function setPage({ entity = "tasks", mode = "list", label = "Tasks" } = {}) {
 }
 
 async function loadEntitiesPage() {
+  const fetcher = globalThis.fetch;
+  vi.stubGlobal("fetch", (input, ...options) => {
+    if (String(input).includes("/api/auth/session")) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          authenticated: true,
+          user: { firstName: "Jane", lastName: "Doe" },
+        }),
+      });
+    }
+    return fetcher(input, ...options);
+  });
   vi.resetModules();
   await import(entitiesScript);
 }

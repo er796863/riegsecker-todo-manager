@@ -16,12 +16,13 @@
     <title>ToDo Manager</title>
   </head>
   <body class="home-page">
+    <header data-global-header></header>
     <main>
-      <header class="home-header">
+      <section class="home-header">
         <p class="eyebrow">PERSONAL ORGANIZATION</p>
         <h1>ToDo Manager</h1>
-        <p class="intro">Keep tasks, users, and schedules organized in one place.</p>
-      </header>
+        <p class="intro">Keep your tasks and schedule organized in one place.</p>
+      </section>
 
       <section aria-labelledby="browse-heading">
         <h2 id="browse-heading">Browse records</h2>
@@ -30,7 +31,7 @@
             <span class="card-icon" aria-hidden="true">T</span>
             <span class="card-copy">
               <strong>Tasks</strong>
-              <span>Review task details and find tasks by title or description.</span>
+              <span>Review your tasks and search by title or description.</span>
             </span>
             <span class="card-arrow" aria-hidden="true">&rarr;</span>
           </a>
@@ -38,7 +39,7 @@
             <span class="card-icon" aria-hidden="true">U</span>
             <span class="card-copy">
               <strong>Users</strong>
-              <span>Browse user profiles and search account information.</span>
+              <span>View your account profile.</span>
             </span>
             <span class="card-arrow" aria-hidden="true">&rarr;</span>
           </a>
@@ -46,7 +47,7 @@
             <span class="card-icon" aria-hidden="true">S</span>
             <span class="card-copy">
               <strong>Schedules</strong>
-              <span>Explore task assignments and notification settings.</span>
+              <span>View your schedule and notification settings.</span>
             </span>
             <span class="card-arrow" aria-hidden="true">&rarr;</span>
           </a>
@@ -56,6 +57,18 @@
     <script>
       document.querySelectorAll("[data-app-page]").forEach((link) => {
         link.href = `${window.appContextPath}/${link.dataset.appPage}`;
+      });
+    </script>
+    <output id="account-status" aria-live="polite"></output>
+    <script type="module">
+      const { initializeAccountNavigation } = await import(
+        `${window.appContextPath}/shared/classes/AccountNavigation.js`
+      );
+
+      initializeAccountNavigation(window.appContextPath).catch((error) => {
+        const status = document.querySelector("#account-status");
+        status.textContent = error instanceof Error ? error.message : "Unable to check account session.";
+        status.dataset.kind = "error";
       });
     </script>
   </body>

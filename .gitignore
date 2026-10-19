@@ -1,4 +1,5 @@
 .gradle
+.tools
 .vscode
 .idea
 build

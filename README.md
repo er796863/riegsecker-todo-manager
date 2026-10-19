@@ -12,28 +12,60 @@ A simple web application for creating, organizing, and tracking personal tasks.
 ## Prerequisites
 
 - **Java Development Kit (JDK):** Version 17
-- **Application Server:** Apache Tomcat 9.0 (Java EE 8 / `javax` namespace)
-  - Default installation path: `C:\Program Files\Apache Software Foundation\Tomcat 9.0` (or set via `CATALINA_HOME`)
 - **Database:** Docker & Docker Compose (for MySQL and phpMyAdmin)
+- **Network access on first run:** Gradle downloads a checksum-verified Apache
+  Tomcat 9.0 distribution into the git-ignored `.tools` directory.
 
 ---
 
 ## Database
 
-The development environment uses MySQL with phpMyAdmin. Database schema and seed data in `docker/mysql/init/001_schema_and_seed.sql` initialize automatically on first launch.
+The development environment uses MySQL with phpMyAdmin. Use the PowerShell
+commands below from the repository root to initialize, update, or reset the
+database:
 
-Schedules contain one user, a map of that user's tasks, and one notification
-setting. On an existing database, apply the schedule-only migration once; it
-recreates and reseeds schedule assignments while preserving users and tasks:
-
-```bash
-docker compose exec -T db mysql -u todo_user -ptodo_password todo_db < docker/mysql/migrations/002_user_schedules.sql
+```powershell
+.\scripts\database.ps1 initialize
+.\scripts\database.ps1 update
+.\scripts\database.ps1 stop
+.\scripts\database.ps1 drop
 ```
 
-### Start Database
-```bash
-docker compose up -d
-```
+- **initialize** starts MySQL and phpMyAdmin. MySQL creates the schema and
+  seed data from `docker/mysql/init/001_schema_and_seed.sql` only when its data
+  volume is first created.
+- **update** adds schedule tables if neither exists and migrates role mappings
+  from the legacy `users.user_role` column to `user_roles`, then removes the
+  old column. It also adds task ownership and assigns existing tasks to the
+  seeded admin account, and enables the local development admin credentials
+  below. It is safe to rerun after starting an existing database.
+- **stop** stops the Compose services while preserving database data.
+- **drop** stops the Compose services and deletes their named volumes,
+  permanently removing all database data. It requires typing `todo_db` to
+  confirm. Run **initialize** afterward to create a fresh database.
+
+Accounts can be created from the **Create account** page. Passwords are stored
+as salted PBKDF2 hashes compatible with Tomcat 9's
+`SecretKeyCredentialHandler`; existing BCrypt passwords are upgraded after a
+successful app login. Each account receives its own schedule. Regular accounts
+can view only their own task, user, and schedule records; an account with the
+`ADMIN` role can view all records across those APIs.
+
+### Local administrator account
+
+The development database includes this administrator account:
+
+| Username | Password |
+|---|---|
+| `admin` | `LocalAdmin123!` |
+
+These are development-only credentials. Change the password before using this
+project in any shared or public environment. Run `.\scripts\database.ps1 update`
+to enable the documented credentials for an existing database; on a fresh
+database, the account is created by initialization. Other seeded demo accounts
+do not have usable default passwords; create a new account to use the app as a
+regular user. Use HTTPS when deploying outside the local development
+environment.
 
 To install the optional local phpMyAdmin dark theme, place its theme files in
 the git-ignored `phpMyAdminDarkMode` folder at the repository root, then
@@ -56,27 +88,38 @@ mount. After recreating it, sign in to phpMyAdmin and select **BooDark** under
   - **Database:** `todo_db`
 - **MySQL Direct Connection:** `localhost:3306` (JDBC: `jdbc:mysql://localhost:3306/todo_db`)
 
-### Stop Database
-```bash
-# Stop containers while preserving data:
-docker compose down
-
-# Stop and reset all database data:
-docker compose down -v
-```
-
 ---
 
 ## Running the Web Application
 
 The project uses Gradle for automated build, deployment, and server management.
+Tomcat is downloaded and configured automatically the first time a Tomcat task
+runs. The setup adds the global `jdbc/todo_db` datasource and `DataSourceRealm`
+to Tomcat's `conf/server.xml`, preserves Tomcat's default user-database Realm,
+uses shutdown port `18005` to avoid the common local `8005` port conflict, and
+creates a one-time backup alongside `server.xml`. The web application
+references the global datasource using a `ResourceLink`. The local datasource
+credentials match `docker-compose.yml`; change
+[`config/tomcat/global-resource.xml`](config/tomcat/global-resource.xml) when
+using different database credentials.
+
+To use an existing Tomcat 9 installation instead, set `CATALINA_HOME` before
+running Gradle. Its `conf/server.xml` will be backed up once as
+`server.xml.riegsecker-backup` before the project configures it.
 
 ### Start Application
-Builds the WAR, stops any running Tomcat instance to prevent port conflicts, deploys the artifact, and starts Tomcat:
+After initializing/updating the database above, builds the WAR, prepares
+Tomcat, stops any running instance to prevent port conflicts, deploys the
+artifact, and starts Tomcat:
 ```powershell
-./gradlew.bat run
+.\gradlew.bat run
 ```
 Open the application in your browser: [http://localhost:8080/riegsecker-todo-manager/](http://localhost:8080/riegsecker-todo-manager/)
+
+The project continues to use its application-managed session login. The
+Tomcat Realm is configured against the same users and roles for container-managed
+authentication when security constraints are added; moving the Realm alone
+does not change the current login flow.
 
 ## Browsing Records
 
@@ -91,13 +134,13 @@ User responses intentionally omit password hashes.
 ### Stop Application
 Stop the running Tomcat server at any time with `Ctrl+C` in the running terminal, or execute:
 ```powershell
-./gradlew.bat stopTomcat
+.\gradlew.bat stopTomcat
 ```
 
 ### Fast Redeploy (In-Place)
 To redeploy changes without restarting Tomcat while the server is actively running:
 ```powershell
-./gradlew.bat deployToTomcat
+.\gradlew.bat deployToTomcat
 ```
 
 ---

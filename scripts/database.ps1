@@ -72,6 +72,7 @@ switch ($Action) {
             }
         }
         Invoke-Migration "docker/mysql/migrations/005_admin_default_credentials.sql"
+        Invoke-Migration "docker/mysql/init/002_sample_data.sql"
         Write-Host "Database migrations are up to date."
     }
     "stop" {

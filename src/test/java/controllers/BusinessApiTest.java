@@ -10,9 +10,11 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 
 import business.User;
+import data.TodoDB;
 
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -68,6 +70,49 @@ public class BusinessApiTest {
     }
 
     @Test
+    public void adminGetsOwnRecordsByDefault() throws Exception {
+        when(request.getPathInfo()).thenReturn("/tasks");
+        when(request.getSession(false).getAttribute(AccountApi.SESSION_USER))
+                .thenReturn(new User(1, "admin", "Alex", "Rivera", "admin@example.com", null, "ADMIN"));
+        try (var database = mockStatic(TodoDB.class)) {
+            database.when(() -> TodoDB.selectTasks(1)).thenReturn(java.util.Map.of());
+
+            api.doGet(request, response);
+
+            database.verify(() -> TodoDB.selectTasks(1));
+            database.verify(() -> TodoDB.selectTasks(null), org.mockito.Mockito.never());
+        }
+    }
+
+    @Test
+    public void onlyAdminsCanRequestAllRecords() throws Exception {
+        when(request.getPathInfo()).thenReturn("/tasks");
+        when(request.getParameter("scope")).thenReturn("all");
+        try (var database = mockStatic(TodoDB.class)) {
+            api.doGet(request, response);
+
+            verify(response).setStatus(HttpServletResponse.SC_FORBIDDEN);
+            assertEquals("{\"error\":\"Administrator access required\"}", responseBody.toString());
+            database.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    public void adminCanRequestAllRecordsExplicitly() throws Exception {
+        when(request.getPathInfo()).thenReturn("/tasks");
+        when(request.getParameter("scope")).thenReturn("all");
+        when(request.getSession(false).getAttribute(AccountApi.SESSION_USER))
+                .thenReturn(new User(1, "admin", "Alex", "Rivera", "admin@example.com", null, "ADMIN"));
+        try (var database = mockStatic(TodoDB.class)) {
+            database.when(() -> TodoDB.selectTasks(null)).thenReturn(java.util.Map.of());
+
+            api.doGet(request, response);
+
+            database.verify(() -> TodoDB.selectTasks(null));
+        }
+    }
+
+    @Test
     public void nonIntegerIdReturnsBadRequestJson() throws Exception {
         when(request.getPathInfo()).thenReturn("/tasks/");
         when(request.getParameter("id")).thenReturn("not-an-integer");
@@ -77,4 +122,5 @@ public class BusinessApiTest {
         verify(response).setStatus(HttpServletResponse.SC_BAD_REQUEST);
         assertEquals("{\"error\":\"IDs must be integers\"}", responseBody.toString());
     }
+
 }

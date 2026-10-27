@@ -4,6 +4,14 @@
          xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/javaee http://xmlns.jcp.org/xml/ns/javaee/web-app_4_0.xsd"
          version="4.0">
     <display-name>Riegsecker ToDo Manager</display-name>
+    <filter>
+        <filter-name>AdminPageFilter</filter-name>
+        <filter-class>controllers.AdminPageFilter</filter-class>
+    </filter>
+    <filter-mapping>
+        <filter-name>AdminPageFilter</filter-name>
+        <url-pattern>/admin/*</url-pattern>
+    </filter-mapping>
     <servlet>
         <servlet-name>BusinessApi</servlet-name>
         <servlet-class>controllers.BusinessApi</servlet-class>

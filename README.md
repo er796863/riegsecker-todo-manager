@@ -32,13 +32,15 @@ database:
 ```
 
 - **initialize** starts MySQL and phpMyAdmin. MySQL creates the schema and
-  seed data from `docker/mysql/init/001_schema_and_seed.sql` only when its data
-  volume is first created.
+  seed data from the ordered scripts in `docker/mysql/init` only when its data
+  volume is first created. The sample-data script ensures every existing user
+  has a schedule with four assigned tasks.
 - **update** adds schedule tables if neither exists and migrates role mappings
   from the legacy `users.user_role` column to `user_roles`, then removes the
   old column. It also adds task ownership and assigns existing tasks to the
-  seeded admin account, and enables the local development admin credentials
-  below. It is safe to rerun after starting an existing database.
+  seeded admin account, enables the local development admin credentials
+  below, and safely adds any missing sample schedules and tasks. It is safe to
+  rerun after starting an existing database.
 - **stop** stops the Compose services while preserving database data.
 - **drop** stops the Compose services and deletes their named volumes,
   permanently removing all database data. It requires typing `todo_db` to
@@ -130,6 +132,13 @@ The home page links to read-only list, detail, and search pages for tasks, users
 - `/api/business/schedules` — list schedules; `?taskId=<taskId>&userId=<userId>` retrieves one schedule and `?search=<term>` searches task IDs, user IDs, and notification settings.
 
 User responses intentionally omit password hashes.
+
+Administrators also see **All tasks**, **All users**, and **All schedules**
+navigation links. These pages display records across all accounts and are
+restricted to signed-in users with the `ADMIN` role; regular account links
+continue to show only the signed-in user's records, including when the account
+has the `ADMIN` role. The API defaults to that current-user scope; requesting
+`?scope=all` is allowed only for administrators.
 
 ### Stop Application
 Stop the running Tomcat server at any time with `Ctrl+C` in the running terminal, or execute:

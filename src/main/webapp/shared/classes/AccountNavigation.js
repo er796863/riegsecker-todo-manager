@@ -50,11 +50,13 @@ export async function initializeAccountNavigation(contextPath) {
 	}
 
 	if (!navigation) {
+		setAdminNavigation(payload.user);
 		return payload.authenticated ? payload.user : null;
 	}
 
 	navigation.replaceChildren();
 	if (!payload.authenticated) {
+		setAdminNavigation(null);
 		const login = document.createElement("a");
 		login.href = `${contextPath}/account/login.html`;
 		login.textContent = "Sign in";
@@ -64,6 +66,20 @@ export async function initializeAccountNavigation(contextPath) {
 		navigation.append(login, register);
 		return null;
 	}
+
+	if (isAdmin(payload.user)) {
+		for (const [label, path] of [
+			["All tasks", "admin/tasks.html"],
+			["All users", "admin/users.html"],
+			["All schedules", "admin/schedules.html"],
+		]) {
+			const link = document.createElement("a");
+			link.href = `${contextPath}/${path}`;
+			link.textContent = label;
+			document.querySelector(".site-links")?.append(link);
+		}
+	}
+	setAdminNavigation(payload.user);
 
 	const greeting = document.createElement("span");
 	greeting.textContent = `Signed in as ${payload.user.firstName} ${payload.user.lastName}`;
@@ -94,4 +110,25 @@ export async function initializeAccountNavigation(contextPath) {
 	});
 	navigation.append(greeting, logout);
 	return payload.user;
+}
+
+/**
+ * @param {Record<string, unknown> | null} user
+ * @returns {boolean}
+ */
+function isAdmin(user) {
+	return typeof user?.role === "string"
+		&& user.role.split(",").some((role) => role.trim().toUpperCase() === "ADMIN");
+}
+
+/**
+ * @param {Record<string, unknown> | null} user
+ */
+function setAdminNavigation(user) {
+	const visible = isAdmin(user);
+	document.querySelectorAll("[data-admin-only]").forEach((element) => {
+		if (element instanceof HTMLElement) {
+			element.hidden = !visible;
+		}
+	});
 }

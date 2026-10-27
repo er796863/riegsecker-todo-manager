@@ -24,6 +24,11 @@ export class EntityPage {
 		this.entity = entity;
 		this.mode = mode;
 		this.label = label;
+		this.scope = page.dataset.scope ?? "mine";
+		if (this.scope !== "mine" && this.scope !== "all") {
+			throw new Error("Entity page scope must be mine or all.");
+		}
+		this.detailBase = page.dataset.detailBase ?? "";
 		this.endpoint = `../api/business/${entity}`;
 
 		const statusOutput = document.querySelector("#status");
@@ -41,6 +46,8 @@ export class EntityPage {
 		this.renderer = new EntityRenderer({
 			entity,
 			label,
+			scope: this.scope,
+			detailBase: this.detailBase,
 			statusOutput,
 			results,
 		});
@@ -93,6 +100,9 @@ export class EntityPage {
 		if (search !== null) {
 			params.set("search", search);
 		}
+		if (this.scope === "all") {
+			params.set("scope", "all");
+		}
 		const suffix = params.size > 0 ? `?${params}` : "";
 
 		const records = /** @type {EntityRecordCollection} */ (
@@ -107,6 +117,9 @@ export class EntityPage {
 		if (!params.has("id")) {
 			if (this.entity === "schedules") {
 				throw new Error("A user ID is required to view a schedule.");
+			}
+			if (this.scope === "all") {
+				params.set("scope", "all");
 			}
 			throw new Error(`A ${this.label.toLowerCase()} ID is required.`);
 		}

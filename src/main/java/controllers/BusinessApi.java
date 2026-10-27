@@ -41,7 +41,17 @@ public class BusinessApi extends HttpServlet {
             sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Sign in to view records");
             return;
         }
-        Integer ownerId = isAdmin(currentUser) ? null : currentUser.getUserId();
+        String scope = request.getParameter("scope");
+        boolean allRecords = "all".equalsIgnoreCase(scope);
+        if (scope != null && !allRecords && !"mine".equalsIgnoreCase(scope)) {
+            sendError(response, HttpServletResponse.SC_BAD_REQUEST, "Scope must be mine or all");
+            return;
+        }
+        if (allRecords && !isAdmin(currentUser)) {
+            sendError(response, HttpServletResponse.SC_FORBIDDEN, "Administrator access required");
+            return;
+        }
+        Integer ownerId = allRecords ? null : currentUser.getUserId();
 
         try {
             switch (entity) {

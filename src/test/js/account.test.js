@@ -42,6 +42,33 @@ describe("account forms", () => {
       .toMatch(/\/todo\/account\/register\.html$/);
   });
 
+  it("adds all-record navigation only for administrators", async () => {
+    document.body.innerHTML = `
+      <header data-global-header></header>
+      <a data-admin-only hidden href="/todo/admin/tasks.html">All tasks</a>
+    `;
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        authenticated: true,
+        user: { firstName: "Alex", lastName: "Rivera", role: "USER, ADMIN" },
+      }),
+    }));
+
+    const { initializeAccountNavigation } = await import(accountNavigationScript);
+    await initializeAccountNavigation("/todo");
+
+    expect([...document.querySelectorAll(".site-links a")].map((link) => link.textContent))
+      .toEqual(["Tasks", "My profile", "My schedule", "All tasks", "All users", "All schedules"]);
+    expect([...document.querySelectorAll(".site-links a")].slice(3).map((link) => link.getAttribute("href")))
+      .toEqual([
+        "/todo/admin/tasks.html",
+        "/todo/admin/users.html",
+        "/todo/admin/schedules.html",
+      ]);
+    expect(document.querySelector("[data-admin-only]").hidden).toBe(false);
+  });
+
   it("posts registration details and displays server validation errors as text", async () => {
     const fetch = vi.fn()
       .mockResolvedValueOnce({

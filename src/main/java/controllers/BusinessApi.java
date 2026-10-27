@@ -27,20 +27,54 @@ public class BusinessApi extends HttpServlet {
 
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response) {
+        response.setHeader("Cache-Control", "no-store");
         String path = request.getPathInfo();
         String entity = path == null ? "" : determineEntityFromPath(path);
         String search = request.getParameter("search");
+        if (!TASKS.equals(entity) && !USERS.equals(entity) && !SCHEDULES.equals(entity)) {
+            sendError(response, HttpServletResponse.SC_NOT_FOUND, "Unknown resource");
+            return;
+        }
+
+        User currentUser = AccountApi.getSessionUser(request);
+        if (currentUser == null) {
+            sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Sign in to view records");
+            return;
+        }
+        String scope = request.getParameter("scope");
+        boolean allRecords = "all".equalsIgnoreCase(scope);
+        if (scope != null && !allRecords && !"mine".equalsIgnoreCase(scope)) {
+            sendError(response, HttpServletResponse.SC_BAD_REQUEST, "Scope must be mine or all");
+            return;
+        }
+        if (allRecords && !isAdmin(currentUser)) {
+            sendError(response, HttpServletResponse.SC_FORBIDDEN, "Administrator access required");
+            return;
+        }
+        Integer ownerId = allRecords ? null : currentUser.getUserId();
 
         try {
             switch (entity) {
-                case TASKS -> getTasks(request, response, search);
-                case USERS -> getUsers(request, response, search);
-                case SCHEDULES -> getSchedules(request, response, search);
+                case TASKS -> getTasks(request, response, search, ownerId);
+                case USERS -> getUsers(request, response, search, ownerId);
+                case SCHEDULES -> getSchedules(request, response, search, ownerId);
                 default -> sendError(response, HttpServletResponse.SC_NOT_FOUND, "Unknown resource");
             }
         } catch (NumberFormatException exception) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, "IDs must be integers");
         }
+    }
+
+    static boolean isAdmin(User user) {
+        if (user == null || user.getRole() == null) {
+            return false;
+        }
+        for (String role : user.getRole().split(",")) {
+            if ("ADMIN".equalsIgnoreCase(role.trim())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String determineEntityFromPath(String path) {
@@ -61,11 +95,11 @@ public class BusinessApi extends HttpServlet {
     }
 
     private interface EntityFunctionWithArg<K, T> {
-        T apply(K input) throws NamingException, SQLException;
+        T apply(K input, Integer userId) throws NamingException, SQLException;
     }
 
     private interface EntityFunctionNoArg<T> {
-        Map<Integer, T> apply() throws NamingException, SQLException;
+        Map<Integer, T> apply(Integer userId) throws NamingException, SQLException;
     }
 
     private record EntityOperations<T>(
@@ -84,11 +118,11 @@ public class BusinessApi extends HttpServlet {
             SCHEDULES, TodoDB::selectSchedule, TodoDB::selectSchedules, TodoDB::searchSchedules, BusinessApi::toJson);
 
     private <T> void getEntities(HttpServletRequest request, HttpServletResponse response, String search,
-            EntityOperations<T> operations) {
+            EntityOperations<T> operations, Integer userId) {
         try {
             String id = request.getParameter("id");
             if (id != null) {
-                T entity = operations.selectEntity().apply(Integer.parseInt(id));
+                T entity = operations.selectEntity().apply(Integer.parseInt(id), userId);
                 if (entity == null) {
                     sendError(response, HttpServletResponse.SC_NOT_FOUND, "Entity not found");
                     return;
@@ -98,7 +132,9 @@ public class BusinessApi extends HttpServlet {
             }
 
             Map<Integer, Map<String, Object>> entities = new LinkedHashMap<>();
-            (search == null ? operations.selectEntities().apply() : operations.searchEntities().apply(search))
+            (search == null
+                    ? operations.selectEntities().apply(userId)
+                    : operations.searchEntities().apply(search, userId))
                     .forEach((entityId, entity) -> entities.put(entityId, operations.toJson().apply(entity)));
             sendJson(response, entities);
         } catch (NamingException | SQLException exception) {
@@ -106,16 +142,16 @@ public class BusinessApi extends HttpServlet {
         }
     }
 
-    private void getTasks(HttpServletRequest request, HttpServletResponse response, String search) {
-        getEntities(request, response, search, TASK_OPERATIONS);
+    private void getTasks(HttpServletRequest request, HttpServletResponse response, String search, Integer userId) {
+        getEntities(request, response, search, TASK_OPERATIONS, userId);
     }
 
-    private void getUsers(HttpServletRequest request, HttpServletResponse response, String search) {
-        getEntities(request, response, search, USER_OPERATIONS);
+    private void getUsers(HttpServletRequest request, HttpServletResponse response, String search, Integer userId) {
+        getEntities(request, response, search, USER_OPERATIONS, userId);
     }
 
-    private void getSchedules(HttpServletRequest request, HttpServletResponse response, String search) {
-        getEntities(request, response, search, SCHEDULE_OPERATIONS);
+    private void getSchedules(HttpServletRequest request, HttpServletResponse response, String search, Integer userId) {
+        getEntities(request, response, search, SCHEDULE_OPERATIONS, userId);
     }
 
     private void handleDatabaseError(String entity, HttpServletResponse response, Exception exception) {

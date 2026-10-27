@@ -7,13 +7,11 @@
     <title>Task details</title>
   </head>
   <body data-entity="tasks" data-mode="detail" data-label="Task">
-    <header>
-      <a href="../">Home</a>
-      <nav aria-label="Task pages">
-        <a href="./index.html">All tasks</a>
-        <a href="./search.html">Search tasks</a>
-      </nav>
-    </header>
+    <header data-global-header></header>
+    <nav class="page-nav" aria-label="Task pages">
+      <a href="./index.html">My tasks</a>
+      <a href="./search.html">Search tasks</a>
+    </nav>
     <main>
       <h1>Task details</h1>
       <output id="status">Loading task details...</output>

@@ -16,6 +16,7 @@ dependencies {
     compileOnly 'jakarta.platform:jakarta.jakartaee-web-api:8.0.0'
 
     implementation 'com.google.code.gson:gson:2.13.1'
+    implementation 'org.mindrot:jbcrypt:0.4'
     providedRuntime 'com.mysql:mysql-connector-j:9.3.0'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'javax.servlet:javax.servlet-api:4.0.1'
@@ -28,7 +29,9 @@ test {
     description = 'Runs all automated tests.'
 }
 
-def tomcatHome = providers.environmentVariable('CATALINA_HOME').orElse('C:\\Program Files\\Apache Software Foundation\\Tomcat 9.0')
+def tomcatVersion = '9.0.123'
+def bundledTomcatHome = layout.projectDirectory.dir(".tools\\apache-tomcat-${tomcatVersion}").asFile
+def tomcatHome = providers.environmentVariable('CATALINA_HOME').orElse(bundledTomcatHome.absolutePath)
 
 def requireTomcatHome = {
     def home = file(tomcatHome.get())
@@ -39,10 +42,55 @@ def requireTomcatHome = {
     home
 }
 
+tasks.register('prepareTomcat') {
+    group = 'application'
+    description = 'Downloads Tomcat when needed and configures its global datasource and Realm.'
+    doLast {
+        def home = file(tomcatHome.get())
+        def launcher = file("${home}\\bin\\catalina.bat")
+        if (!launcher.isFile()) {
+            if (providers.environmentVariable('CATALINA_HOME').isPresent()) {
+                throw new GradleException("Tomcat was not found at ${home} configured by CATALINA_HOME.")
+            }
+
+            def artifact = "apache-tomcat-${tomcatVersion}-windows-x64.zip"
+            def baseUrl = "https://dlcdn.apache.org/tomcat/tomcat-9/v${tomcatVersion}/bin"
+            def downloadDirectory = layout.buildDirectory.dir('tomcat-download').get().asFile
+            downloadDirectory.mkdirs()
+            def archive = file("${downloadDirectory}\\${artifact}")
+            def checksumUrl = new URL("${baseUrl}/${artifact}.sha512")
+            def expectedChecksum = checksumUrl.text.trim().split(/\s+/)[0].toLowerCase(Locale.ROOT)
+            new URL("${baseUrl}/${artifact}").withInputStream { input ->
+                archive.withOutputStream { output -> output << input }
+            }
+            def digest = java.security.MessageDigest.getInstance('SHA-512')
+                    .digest(archive.bytes).encodeHex().toString()
+            if (digest != expectedChecksum) {
+                archive.delete()
+                throw new GradleException("SHA-512 verification failed for ${artifact}.")
+            }
+
+            copy {
+                from zipTree(archive)
+                into file("${projectDir}\\.tools")
+            }
+            if (!launcher.isFile()) {
+                throw new GradleException("Tomcat archive did not contain the expected directory: ${home}")
+            }
+        }
+
+        exec {
+            commandLine 'powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                    '-File', file('scripts\\configure-tomcat.ps1').absolutePath,
+                    '-TomcatHome', home.absolutePath
+        }
+    }
+}
+
 tasks.register('deployToTomcat') {
     group = 'application'
     description = 'Builds and deploys the WAR to the configured Tomcat server.'
-    dependsOn tasks.named('war')
+    dependsOn tasks.named('war'), tasks.named('prepareTomcat')
     doLast {
         def home = requireTomcatHome()
         def webappsDirectory = file("${home}\\webapps")
@@ -62,7 +110,7 @@ tasks.register('deployToTomcat') {
 tasks.register('run') {
     group = 'application'
     description = 'Builds, deploys, and starts the web application in Tomcat.'
-    dependsOn tasks.named('stopTomcat'), tasks.named('deployToTomcat')
+    dependsOn tasks.named('prepareTomcat'), tasks.named('stopTomcat'), tasks.named('deployToTomcat')
     doLast {
         def home = requireTomcatHome()
         def javaHome = javaToolchains.launcherFor {
@@ -80,6 +128,7 @@ tasks.register('run') {
 tasks.register('stopTomcat') {
     group = 'application'
     description = 'Stops the configured Tomcat server.'
+    dependsOn tasks.named('prepareTomcat')
     doLast {
         def home = requireTomcatHome()
         exec {

@@ -12,13 +12,17 @@ export class EntityRenderer {
 	 * @param {{
 	 *   entity: EntityName,
 	 *   label: string,
+	 *   scope: "mine" | "all",
+	 *   detailBase: string,
 	 *   statusOutput: HTMLOutputElement,
 	 *   results: HTMLElement
 	 * }} options
 	 */
-	constructor({ entity, label, statusOutput, results }) {
+	constructor({ entity, label, scope, detailBase, statusOutput, results }) {
 		this.entity = entity;
 		this.label = label;
+		this.scope = scope;
+		this.detailBase = detailBase;
 		this.statusOutput = statusOutput;
 		this.results = results;
 	}
@@ -235,7 +239,10 @@ export class EntityRenderer {
 		} else {
 			params.set("id", String(/** @type {UserRecord} */ (record).userId));
 		}
-		return `detail.html?${params}`;
+		if (this.scope === "all") {
+			params.set("scope", "all");
+		}
+		return `${this.detailBase}detail.html?${params}`;
 	}
 
 	/**

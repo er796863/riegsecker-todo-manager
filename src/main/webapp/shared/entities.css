@@ -19,6 +19,88 @@ header {
 	padding: 1.5rem 0 0.5rem;
 }
 
+.site-header {
+	box-sizing: border-box;
+	width: 100%;
+	margin: 0;
+	padding: 0.75rem 1rem;
+	border-bottom: 1px solid #d5deea;
+	background: white;
+}
+
+.site-header-inner {
+	display: flex;
+	align-items: center;
+	gap: 1.5rem;
+	width: min(1100px, 100%);
+	min-height: 3rem;
+	margin: 0 auto;
+}
+
+.site-brand {
+	flex-shrink: 0;
+	color: #14243a;
+	font-size: 1.1rem;
+	font-weight: 750;
+	text-decoration: none;
+}
+
+.site-links {
+	flex: 1;
+	padding: 0;
+}
+
+.site-links a {
+	color: #526174;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.site-links a:hover,
+.site-links a:focus-visible {
+	color: #0759a5;
+	text-decoration: underline;
+	text-underline-offset: 0.2em;
+}
+
+.account-actions {
+	justify-content: flex-end;
+	padding: 0;
+}
+
+.account-actions span {
+	color: #526174;
+	font-size: 0.9rem;
+}
+
+.account-actions a,
+.account-actions button {
+	padding: 0.4rem 0.75rem;
+	border: 1px solid #b9c9dc;
+	border-radius: 0.4rem;
+	background: white;
+	color: #0759a5;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.account-actions a:last-child {
+	border-color: #0759a5;
+	background: #0759a5;
+	color: white;
+}
+
+.account-actions button:hover,
+.account-actions a:hover {
+	filter: brightness(0.95);
+}
+
+.page-nav {
+	width: min(900px, calc(100% - 2rem));
+	margin: 0 auto;
+	border-bottom: 1px solid #d5deea;
+}
+
 main {
 	padding: 1rem 0 3rem;
 }
@@ -42,6 +124,37 @@ article,
 	border: 1px solid #d5deea;
 	border-radius: 0.5rem;
 	background: white;
+}
+
+form#account-form {
+	display: grid;
+	gap: 0.65rem;
+	max-width: 30rem;
+}
+
+form#account-form input {
+	box-sizing: border-box;
+	width: 100%;
+	padding: 0.55rem;
+}
+
+form#account-form button {
+	justify-self: start;
+	margin-top: 0.5rem;
+}
+
+[data-account-nav] {
+	align-items: center;
+	justify-content: flex-end;
+	min-height: 2.5rem;
+}
+
+[data-account-nav] span {
+	margin-right: auto;
+}
+
+[data-account-nav] button {
+	padding: 0.35rem 0.7rem;
 }
 
 .schedule-group {
@@ -151,6 +264,10 @@ dd {
 	font-size: 1.35rem;
 }
 
+.home-page .site-header {
+	margin-bottom: 1rem;
+}
+
 .record-links {
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -219,8 +336,29 @@ dd {
 }
 
 @media (max-width: 720px) {
+	.site-header-inner {
+		flex-wrap: wrap;
+		gap: 0.5rem 1rem;
+	}
+
+	.site-links {
+		order: 3;
+		flex-basis: 100%;
+	}
+
+	.account-actions {
+		margin-left: auto;
+	}
+
 	.record-links {
 		grid-template-columns: 1fr;
+	}
+
+	@media (max-width: 420px) {
+		.account-actions span {
+			flex-basis: 100%;
+			text-align: right;
+		}
 	}
 
 	.record-card {

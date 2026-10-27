@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="../shared/entities.css" />
+    <title>Create account · ToDo Manager</title>
+  </head>
+  <body>
+    <header data-global-header></header>
+    <main>
+      <h1>Create account</h1>
+      <form id="account-form" data-mode="register">
+        <label for="username">Username</label>
+        <input id="username" name="username" autocomplete="username" required minlength="3" maxlength="50" pattern="[A-Za-z0-9_.-]+" />
+        <label for="firstName">First name</label>
+        <input id="firstName" name="firstName" autocomplete="given-name" required maxlength="50" />
+        <label for="lastName">Last name</label>
+        <input id="lastName" name="lastName" autocomplete="family-name" required maxlength="50" />
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required maxlength="254" />
+        <label for="password">Password (at least 12 characters)</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" required minlength="12" />
+        <button id="account-submit" type="submit">Create account</button>
+      </form>
+      <output id="account-status" aria-live="polite"></output>
+      <p>Already have an account? <a href="./login.html">Sign in</a>.</p>
+    </main>
+    <script type="module" src="../shared/account.js"></script>
+  </body>
+</html>

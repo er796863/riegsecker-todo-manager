@@ -7,15 +7,13 @@
     <title>Users</title>
   </head>
   <body data-entity="users" data-mode="list" data-label="Users">
-    <header>
-      <a href="../">Home</a>
-      <nav aria-label="User pages">
-        <a href="./index.html">All users</a>
-        <a href="./search.html">Search users</a>
-      </nav>
-    </header>
+    <header data-global-header></header>
+    <nav class="page-nav" aria-label="User pages">
+      <a href="./index.html">My profile</a>
+      <a href="./search.html">Search users</a>
+    </nav>
     <main>
-      <h1>Users</h1>
+      <h1>My profile</h1>
       <output id="status">Loading users...</output>
       <section id="results" aria-label="User records"></section>
     </main>

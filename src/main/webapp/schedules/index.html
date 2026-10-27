@@ -7,15 +7,13 @@
     <title>Schedules</title>
   </head>
   <body data-entity="schedules" data-mode="list" data-label="Schedules">
-    <header>
-      <a href="../">Home</a>
-      <nav aria-label="Schedule pages">
-        <a href="./index.html">All schedules</a>
-        <a href="./search.html">Search schedules</a>
-      </nav>
-    </header>
+    <header data-global-header></header>
+    <nav class="page-nav" aria-label="Schedule pages">
+      <a href="./index.html">My schedule</a>
+      <a href="./search.html">Search schedules</a>
+    </nav>
     <main>
-      <h1>Schedules</h1>
+      <h1>My schedule</h1>
       <output id="status">Loading schedules...</output>
       <section id="results" aria-label="Schedule records"></section>
     </main>

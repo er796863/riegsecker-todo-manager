@@ -13,6 +13,19 @@ function setPage({ entity = "tasks", mode = "list", label = "Tasks" } = {}) {
 }
 
 async function loadEntitiesPage() {
+  const fetcher = globalThis.fetch;
+  vi.stubGlobal("fetch", (input, ...options) => {
+    if (String(input).includes("/api/auth/session")) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          authenticated: true,
+          user: { firstName: "Jane", lastName: "Doe", role: "ADMIN" },
+        }),
+      });
+    }
+    return fetcher(input, ...options);
+  });
   vi.resetModules();
   await import(entitiesScript);
 }
@@ -46,6 +59,76 @@ describe("entity pages", () => {
       "detail.html?id=1",
     );
     expect(document.querySelector("#status").textContent).toBe("1 record found.");
+  });
+
+  it("loads all records and links admin records to their all-scope details", async () => {
+    document.body.innerHTML = `
+      <main data-entity="tasks" data-mode="list" data-label="Tasks" data-scope="all" data-detail-base="../tasks/">
+        <output id="status"></output>
+        <section id="results"></section>
+      </main>
+    `;
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        4: { taskId: 4, taskTitle: "Review", taskDateDue: null },
+      }),
+    });
+    vi.stubGlobal("fetch", fetch);
+    await loadEntitiesPage();
+
+    expect(fetch).toHaveBeenCalledWith("../api/business/tasks?scope=all");
+    expect(document.querySelector("#results a").getAttribute("href")).toBe(
+      "../tasks/detail.html?id=4&scope=all",
+    );
+  });
+
+  it("uses the current user's scope by default even if the session user is an admin", async () => {
+    setPage();
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        4: { taskId: 4, taskTitle: "Personal task", taskDateDue: null },
+      }),
+    });
+    vi.stubGlobal("fetch", fetch);
+    await loadEntitiesPage();
+
+    expect(fetch).toHaveBeenCalledWith("../api/business/tasks");
+    expect(document.querySelector("#results h2").textContent).toBe("Personal task");
+  });
+
+  it("requests all-record scope when opening an admin record detail", async () => {
+    setPage({ mode: "detail", label: "Task" });
+    history.replaceState(null, "", "/tasks/detail.html?id=4&scope=all");
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        taskId: 4,
+        taskTitle: "Another user's task",
+        taskDescription: null,
+      }),
+    });
+    vi.stubGlobal("fetch", fetch);
+    await loadEntitiesPage();
+
+    expect(fetch).toHaveBeenCalledWith("../api/business/tasks?id=4&scope=all");
+    expect(document.querySelector("#results").textContent).toContain("Another user's task");
+  });
+
+  it("uses the current user's scope by default even if the session user is an admin", async () => {
+    setPage();
+    const fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        4: { taskId: 4, taskTitle: "Review", taskDateDue: null },
+      }),
+    });
+    vi.stubGlobal("fetch", fetch);
+    await loadEntitiesPage();
+
+    expect(fetch).toHaveBeenCalledWith("../api/business/tasks");
+    expect(document.querySelector("#results h2").textContent).toBe("Review");
   });
 
   it("shows API errors without inserting response text as markup", async () => {

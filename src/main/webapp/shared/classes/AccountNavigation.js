@@ -1,3 +1,5 @@
+import { initializeNotificationsWidget } from "./NotificationsWidget.js";
+
 /**
  * @param {string} contextPath
  * @returns {Promise<Record<string, unknown> | null>}
@@ -83,6 +85,7 @@ export async function initializeAccountNavigation(contextPath) {
 
 	const greeting = document.createElement("span");
 	greeting.textContent = `Signed in as ${payload.user.firstName} ${payload.user.lastName}`;
+	initializeNotificationsWidget(contextPath, navigation);
 	const logout = document.createElement("button");
 	logout.type = "button";
 	logout.textContent = "Sign out";

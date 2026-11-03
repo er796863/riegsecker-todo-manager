@@ -25,4 +25,16 @@ public class ScheduleTest {
         assertEquals("weekly", schedule.getNotificationSettings());
         assertEquals(Map.of(), schedule.getTasks());
     }
+
+    @Test
+    public void storesWeekdaysLocalTimeAndTimeZone() {
+        Schedule schedule = new Schedule("WEEKLY", true,
+                java.util.List.of("MONDAY", "WEDNESDAY"), "08:30", "America/Denver",
+                Map.of(), new User());
+
+        assertEquals(java.util.List.of("MONDAY", "WEDNESDAY"), schedule.getNotificationDays());
+        assertEquals("08:30", schedule.getNotificationTime());
+        assertEquals("America/Denver", schedule.getNotificationTimezone());
+        org.junit.Assert.assertTrue(schedule.isNotificationsEnabled());
+    }
 }

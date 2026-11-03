@@ -21,6 +21,14 @@
         <url-pattern>/api/business/*</url-pattern>
     </servlet-mapping>
     <servlet>
+        <servlet-name>NotificationsApi</servlet-name>
+        <servlet-class>controllers.NotificationsApi</servlet-class>
+    </servlet>
+    <servlet-mapping>
+        <servlet-name>NotificationsApi</servlet-name>
+        <url-pattern>/api/notifications/*</url-pattern>
+    </servlet-mapping>
+    <servlet>
         <servlet-name>AccountApi</servlet-name>
         <servlet-class>controllers.AccountApi</servlet-class>
     </servlet>

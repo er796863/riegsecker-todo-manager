@@ -16,7 +16,7 @@ try {
 			`${contextPath}/account/login.html?next=${encodeURIComponent(next)}`,
 		);
 	} else {
-		await new EntityPage(page).initialize();
+		await new EntityPage(page).initialize(user);
 	}
 } catch (error) {
 	const status = document.querySelector("#status");

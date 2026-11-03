@@ -15,6 +15,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.mockStatic;
 
 public class AdminPageFilterTest {
     private AdminPageFilter filter;
@@ -49,10 +50,14 @@ public class AdminPageFilterTest {
         when(session.getAttribute(AccountApi.SESSION_USER))
                 .thenReturn(new User(7, "jdoe", "Jane", "Doe", "jane@example.com", null, "USER"));
 
-        filter.doFilter(request, response, chain);
+        try (var database = mockStatic(data.TodoDB.class)) {
+            database.when(() -> data.TodoDB.isAdministrator(7)).thenReturn(false);
 
-        verify(response).sendError(HttpServletResponse.SC_FORBIDDEN);
-        verify(chain, never()).doFilter(request, response);
+            filter.doFilter(request, response, chain);
+
+            verify(response).sendError(HttpServletResponse.SC_FORBIDDEN);
+            verify(chain, never()).doFilter(request, response);
+        }
     }
 
     @Test
@@ -62,8 +67,28 @@ public class AdminPageFilterTest {
         when(session.getAttribute(AccountApi.SESSION_USER))
                 .thenReturn(new User(1, "admin", "Alex", "Rivera", "admin@example.com", null, "USER, ADMIN"));
 
-        filter.doFilter(request, response, chain);
+        try (var database = mockStatic(data.TodoDB.class)) {
+            database.when(() -> data.TodoDB.isAdministrator(1)).thenReturn(true);
 
-        verify(chain).doFilter((ServletRequest) request, (ServletResponse) response);
+            filter.doFilter(request, response, chain);
+
+            verify(chain).doFilter((ServletRequest) request, (ServletResponse) response);
+        }
+    }
+
+    @Test
+    public void deniesSessionWhoseAdministratorRoleWasRemoved() throws Exception {
+        HttpSession session = mock(HttpSession.class);
+        when(request.getSession(false)).thenReturn(session);
+        when(session.getAttribute(AccountApi.SESSION_USER))
+                .thenReturn(new User(1, "admin", "Alex", "Admin", "admin@example.com", null, "ADMIN"));
+        try (var database = mockStatic(data.TodoDB.class)) {
+            database.when(() -> data.TodoDB.isAdministrator(1)).thenReturn(false);
+
+            filter.doFilter(request, response, chain);
+
+            verify(response).sendError(HttpServletResponse.SC_FORBIDDEN);
+            verify(chain, never()).doFilter(request, response);
+        }
     }
 }

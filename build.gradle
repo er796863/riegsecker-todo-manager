@@ -131,9 +131,31 @@ tasks.register('stopTomcat') {
     dependsOn tasks.named('prepareTomcat')
     doLast {
         def home = requireTomcatHome()
+        def serverXml = new XmlSlurper(false, false).parse(file("${home}\\conf\\server.xml"))
+        def shutdownPort = serverXml.@port.text().toInteger()
+        def shutdownAddress = serverXml.@address.text()
+        if (!shutdownAddress) {
+            shutdownAddress = 'localhost'
+        }
+        try {
+            def socket = new java.net.Socket()
+            try {
+                socket.connect(
+                        new java.net.InetSocketAddress(shutdownAddress, shutdownPort), 500)
+            } finally {
+                socket.close()
+            }
+        } catch (java.net.ConnectException ignored) {
+            logger.lifecycle("Tomcat is not running; nothing to stop.")
+            return
+        }
+
+        def javaHome = javaToolchains.launcherFor {
+            languageVersion = JavaLanguageVersion.of(17)
+        }.get().metadata.installationPath.asFile
         exec {
             workingDir home
-            ignoreExitValue = true
+            environment 'JAVA_HOME', javaHome
             commandLine 'cmd', '/c', 'bin\\shutdown.bat'
         }
     }

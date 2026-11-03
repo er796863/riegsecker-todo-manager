@@ -6,15 +6,23 @@ import javax.servlet.FilterConfig;
 import javax.servlet.ServletException;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
+import javax.servlet.ServletContext;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import javax.naming.NamingException;
+import java.sql.SQLException;
+
+import data.TodoDB;
 
 public class AdminPageFilter implements Filter {
+    private ServletContext servletContext;
+
     @Override
     public void init(FilterConfig filterConfig) {
+        servletContext = filterConfig.getServletContext();
     }
 
     @Override
@@ -35,8 +43,14 @@ public class AdminPageFilter implements Filter {
             httpResponse.sendRedirect(login);
             return;
         }
-        if (!BusinessApi.isAdmin(user)) {
-            httpResponse.sendError(HttpServletResponse.SC_FORBIDDEN);
+        try {
+            if (user.getUserId() == null || !TodoDB.isAdministrator(user.getUserId())) {
+                httpResponse.sendError(HttpServletResponse.SC_FORBIDDEN);
+                return;
+            }
+        } catch (NamingException | SQLException exception) {
+            servletContext.log("Unable to verify administrator access", exception);
+            httpResponse.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
             return;
         }
 

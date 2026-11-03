@@ -1,5 +1,8 @@
-INSERT INTO schedules (user_id, notification_setting)
-SELECT u.user_id, 'WEEKLY'
+INSERT INTO schedules (
+    user_id, notification_setting, notification_enabled, notification_days,
+    notification_time, notification_timezone, notification_checked_at_utc
+)
+SELECT u.user_id, 'WEEKLY', 1, 1, '09:00:00', 'UTC', UTC_TIMESTAMP()
 FROM users AS u
 LEFT JOIN schedules AS s ON s.user_id = u.user_id
 WHERE s.schedule_id IS NULL;

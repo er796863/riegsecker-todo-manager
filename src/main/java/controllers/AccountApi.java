@@ -138,6 +138,18 @@ public class AccountApi extends HttpServlet {
 
     private static String validateRegistration(String username, String firstName, String lastName,
             String email, String password) {
+        String profileError = validateProfile(username, firstName, lastName, email);
+        if (profileError != null) {
+            return profileError;
+        }
+        if (password == null || password.length() < 12
+                || password.getBytes(StandardCharsets.UTF_8).length > 72) {
+            return "Password must be at least 12 characters and no more than 72 UTF-8 bytes";
+        }
+        return null;
+    }
+
+    static String validateProfile(String username, String firstName, String lastName, String email) {
         if (!USERNAME.matcher(username).matches()) {
             return "Username must be 3-50 characters using letters, numbers, dots, underscores, or hyphens";
         }
@@ -147,10 +159,6 @@ public class AccountApi extends HttpServlet {
         }
         if (email.length() > 254 || !EMAIL.matcher(email).matches()) {
             return "Enter a valid email address";
-        }
-        if (password == null || password.length() < 12
-                || password.getBytes(StandardCharsets.UTF_8).length > 72) {
-            return "Password must be at least 12 characters and no more than 72 UTF-8 bytes";
         }
         return null;
     }

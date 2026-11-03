@@ -71,6 +71,28 @@ switch ($Action) {
                 throw "The tasks.user_id migration is incomplete. Inspect the database before retrying."
             }
         }
+
+        $schedulePreferenceColumns = Invoke-DatabaseSql "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'schedules' AND column_name IN ('notification_enabled', 'notification_days', 'notification_time', 'notification_timezone')"
+        if ($schedulePreferenceColumns -eq "0") {
+            Invoke-Migration "docker/mysql/migrations/006_schedule_notification_preferences.sql"
+        } elseif ($schedulePreferenceColumns -ne "4") {
+            throw "Schedule notification preferences are only partially migrated. Inspect the database before continuing."
+        }
+
+        $notificationCheckColumn = Invoke-DatabaseSql "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'schedules' AND column_name = 'notification_checked_at_utc'"
+        if ($notificationCheckColumn -eq "0") {
+            Invoke-Migration "docker/mysql/migrations/007_schedule_notification_cursor.sql"
+        } elseif ($notificationCheckColumn -ne "1") {
+            throw "Schedule notification tracking is in an unexpected state. Inspect the database before continuing."
+        }
+
+        $notificationTables = Invoke-DatabaseSql "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN ('notifications', 'notification_tasks')"
+        if ($notificationTables -eq "0") {
+            Invoke-Migration "docker/mysql/migrations/008_in_app_notifications.sql"
+        } elseif ($notificationTables -ne "2") {
+            throw "In-app notifications are only partially migrated. Inspect the database before continuing."
+        }
+
         Invoke-Migration "docker/mysql/migrations/005_admin_default_credentials.sql"
         Invoke-Migration "docker/mysql/init/002_sample_data.sql"
         Write-Host "Database migrations are up to date."

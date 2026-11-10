@@ -13,7 +13,8 @@ public class Task implements Serializable {
     public Task() {
     }
 
-    public Task(Integer taskId, String taskTitle, String taskDescription, LocalDateTime taskDateCreated, LocalDateTime taskDateDue) {
+    public Task(Integer taskId, String taskTitle, String taskDescription,
+            LocalDateTime taskDateCreated, LocalDateTime taskDateDue) {
         this.taskId = taskId;
         this.taskTitle = taskTitle;
         this.taskDescription = taskDescription;

@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run && npm run check:types",
     "test:watch": "vitest",
     "check:types": "tsc --project src/main/webapp/shared/jsconfig.json --noEmit"
   },

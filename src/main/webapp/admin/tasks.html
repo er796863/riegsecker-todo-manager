@@ -6,13 +6,23 @@
     <link rel="stylesheet" href="../shared/entities.css" />
     <title>All tasks</title>
   </head>
-  <body data-entity="tasks" data-mode="list" data-label="Tasks" data-scope="all" data-detail-base="../tasks/">
+
+  <body
+    data-entity="tasks"
+    data-mode="list"
+    data-label="Tasks"
+    data-scope="all"
+    data-detail-base="../tasks/"
+  >
     <header data-global-header></header>
+
     <main>
       <h1>All tasks</h1>
+
       <output id="status">Loading tasks...</output>
       <section id="results" aria-label="All task records"></section>
     </main>
+
     <script type="module" src="../shared/entities.js"></script>
   </body>
 </html>

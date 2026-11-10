@@ -6,22 +6,28 @@
     <link rel="stylesheet" href="../shared/entities.css" />
     <title>Search schedules</title>
   </head>
+
   <body data-entity="schedules" data-mode="search" data-label="Schedules">
     <header data-global-header></header>
+
     <nav class="page-nav" aria-label="Schedule pages">
       <a href="./index.html">My schedule</a>
       <a href="./search.html">Search schedules</a>
     </nav>
+
     <main>
       <h1>Search schedules</h1>
+
       <form id="search-form">
         <label for="search">Search by task, user, or notification setting</label><br />
         <input id="search" name="search" type="search" />
         <button type="submit">Search</button>
       </form>
+
       <output id="status">Enter a search term.</output>
       <section id="results" aria-label="Matching schedules"></section>
     </main>
+
     <script type="module" src="../shared/entities.js"></script>
   </body>
 </html>

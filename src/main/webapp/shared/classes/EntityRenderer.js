@@ -15,16 +15,22 @@ export class EntityRenderer {
 	 *   scope: "mine" | "all",
 	 *   detailBase: string,
 	 *   statusOutput: HTMLOutputElement,
-	 *   results: HTMLElement
+	 *   results: HTMLElement,
+	 *   onEdit: (record: EntityRecord) => void,
+	 *   onDelete: (record: EntityRecord) => void
 	 * }} options
 	 */
-	constructor({ entity, label, scope, detailBase, statusOutput, results }) {
+	constructor({ entity, label, scope, detailBase, statusOutput, results, onEdit, onDelete }) {
 		this.entity = entity;
 		this.label = label;
 		this.scope = scope;
 		this.detailBase = detailBase;
 		this.statusOutput = statusOutput;
 		this.results = results;
+		this.canManage = false;
+		/** @type {number | null} */ this.currentUserId = null;
+		this.onEdit = onEdit;
+		this.onDelete = onDelete;
 	}
 
 	/**
@@ -77,8 +83,8 @@ export class EntityRenderer {
 
 		if (this.entity === "schedules") {
 			const schedule = /** @type {ScheduleRecord} */ (record);
-			const { firstName, lastName, userName, email, role } =
-				schedule.user;
+			const { firstName, lastName, userName, email, role } = schedule.user;
+
 			this.results.append(
 				this.createScheduleDetailCard(
 					`${firstName} ${lastName} (@${userName})`,
@@ -100,8 +106,13 @@ export class EntityRenderer {
 			this.results.append(
 				this.createScheduleDetailCard(
 					"Notification settings",
-					schedule.notificationSettings,
-					{ notificationSettings: schedule.notificationSettings },
+					`${schedule.notificationsEnabled ? "Enabled" : "Disabled"} · ${schedule.notificationSettings}`,
+					{
+						notificationsEnabled: schedule.notificationsEnabled,
+						notificationDays: schedule.notificationDays,
+						notificationTime: schedule.notificationTime,
+						notificationTimezone: schedule.notificationTimezone,
+					},
 				),
 			);
 		} else {
@@ -116,7 +127,7 @@ export class EntityRenderer {
 	/**
 	 * @param {string} title
 	 * @param {string} summary
-	 * @param {TaskRecord | UserRecord | { notificationSettings: string }} record
+	 * @param {object} record
 	 * @returns {HTMLElement}
 	 */
 	createScheduleDetailCard(title, summary, record) {
@@ -155,6 +166,10 @@ export class EntityRenderer {
 			cards.append(this.createRecordCard(schedule, task));
 		}
 
+		if (this.canManage) {
+			group.append(this.createActions(schedule));
+		}
+
 		group.append(cards);
 		return group;
 	}
@@ -180,7 +195,43 @@ export class EntityRenderer {
 		link.textContent = `View ${this.label.toLowerCase()} details`;
 
 		article.append(link);
+		if (this.canManage && this.entity !== "schedules" && this.canManageRecord(record)) {
+			article.append(this.createActions(record));
+		}
+
 		return article;
+	}
+
+	/**
+	 * @param {EntityRecord} record
+	 * @returns {boolean}
+	 */
+	canManageRecord(record) {
+		return this.entity !== "users"
+			|| /** @type {UserRecord} */ (record).userId !== this.currentUserId;
+	}
+
+	/**
+	 * @param {EntityRecord} record
+	 * @returns {HTMLElement}
+	 */
+	createActions(record) {
+		const actions = document.createElement("div");
+		actions.className = "record-actions";
+
+		const edit = document.createElement("button");
+		edit.type = "button";
+		edit.textContent = "Edit";
+		edit.addEventListener("click", () => this.onEdit(record));
+
+		const remove = document.createElement("button");
+		remove.type = "button";
+		remove.className = "danger-button";
+		remove.textContent = "Delete";
+		remove.addEventListener("click", () => this.onDelete(record));
+		actions.append(edit, remove);
+
+		return actions;
 	}
 
 	/**
@@ -239,15 +290,17 @@ export class EntityRenderer {
 		} else {
 			params.set("id", String(/** @type {UserRecord} */ (record).userId));
 		}
+
 		if (this.scope === "all") {
 			params.set("scope", "all");
 		}
+
 		return `${this.detailBase}detail.html?${params}`;
 	}
 
 	/**
 	 * @param {HTMLElement} container
-	 * @param {TaskRecord | UserRecord | { notificationSettings: string }} record
+	 * @param {object} record
 	 */
 	addDetails(container, record) {
 		const details = document.createElement("dl");

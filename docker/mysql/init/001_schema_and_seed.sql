@@ -40,6 +40,11 @@ CREATE TABLE IF NOT EXISTS schedules (
     schedule_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     user_id INT UNSIGNED NOT NULL,
     notification_setting VARCHAR(30) NOT NULL DEFAULT 'NONE',
+    notification_enabled TINYINT(1) NOT NULL DEFAULT 0,
+    notification_days TINYINT UNSIGNED NOT NULL DEFAULT 127,
+    notification_time TIME NOT NULL DEFAULT '09:00:00',
+    notification_timezone VARCHAR(64) NOT NULL DEFAULT 'UTC',
+    notification_checked_at_utc DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (schedule_id),
     UNIQUE KEY uq_schedules_user_id (user_id),
     CONSTRAINT fk_schedules_user
@@ -58,6 +63,41 @@ CREATE TABLE IF NOT EXISTS schedule_tasks (
         ON DELETE CASCADE,
     CONSTRAINT fk_schedule_tasks_task
         FOREIGN KEY (task_id) REFERENCES tasks (task_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+) ENGINE = InnoDB;
+
+CREATE TABLE IF NOT EXISTS notifications (
+    notification_id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    user_id INT UNSIGNED NOT NULL,
+    schedule_id INT UNSIGNED NOT NULL,
+    scheduled_date DATE NOT NULL,
+    scheduled_time TIME NOT NULL,
+    notification_timezone VARCHAR(64) NOT NULL,
+    additional_task_count INT UNSIGNED NOT NULL DEFAULT 0,
+    is_read TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (notification_id),
+    UNIQUE KEY uq_notifications_schedule_date (schedule_id, scheduled_date),
+    KEY idx_notifications_user_date (user_id, scheduled_date, notification_id),
+    CONSTRAINT fk_notifications_user
+        FOREIGN KEY (user_id) REFERENCES users (user_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_notifications_schedule
+        FOREIGN KEY (schedule_id) REFERENCES schedules (schedule_id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE
+) ENGINE = InnoDB;
+
+CREATE TABLE IF NOT EXISTS notification_tasks (
+    notification_id BIGINT UNSIGNED NOT NULL,
+    task_id INT UNSIGNED NOT NULL,
+    task_title VARCHAR(150) NOT NULL,
+    task_date_due DATETIME NULL,
+    PRIMARY KEY (notification_id, task_id),
+    CONSTRAINT fk_notification_tasks_notification
+        FOREIGN KEY (notification_id) REFERENCES notifications (notification_id)
         ON UPDATE CASCADE
         ON DELETE CASCADE
 ) ENGINE = InnoDB;
@@ -98,15 +138,26 @@ FROM (
 JOIN users AS u ON u.username = 'admin'
 ON DUPLICATE KEY UPDATE task_title = VALUES(task_title);
 
-INSERT INTO schedules (user_id, notification_setting)
-SELECT u.user_id, user_schedules.notification_setting
+INSERT INTO schedules (
+    user_id, notification_setting, notification_enabled, notification_days,
+    notification_time, notification_timezone, notification_checked_at_utc
+)
+SELECT u.user_id, user_schedules.notification_setting,
+       user_schedules.notification_setting <> 'NONE',
+       CASE WHEN user_schedules.notification_setting = 'WEEKLY' THEN 1 ELSE 127 END,
+       '09:00:00', 'UTC', UTC_TIMESTAMP()
 FROM (
     SELECT 'emorgan' AS username, 'DAILY' AS notification_setting
     UNION ALL SELECT 'jchen', 'WEEKLY'
     UNION ALL SELECT 'admin', 'DAILY'
 ) AS user_schedules
 JOIN users AS u ON u.username = user_schedules.username
-ON DUPLICATE KEY UPDATE notification_setting = VALUES(notification_setting);
+ON DUPLICATE KEY UPDATE
+    notification_setting = VALUES(notification_setting),
+    notification_enabled = VALUES(notification_enabled),
+    notification_days = VALUES(notification_days),
+    notification_time = VALUES(notification_time),
+    notification_timezone = VALUES(notification_timezone);
 
 INSERT INTO schedule_tasks (schedule_id, task_id)
 SELECT s.schedule_id, t.task_id

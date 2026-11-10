@@ -13,10 +13,13 @@
       stylesheet.href = `${contextPath}/shared/entities.css`;
       document.head.append(stylesheet);
     </script>
+
     <title>ToDo Manager</title>
   </head>
+
   <body class="home-page">
     <header data-global-header></header>
+
     <main>
       <section class="home-header">
         <p class="eyebrow">PERSONAL ORGANIZATION</p>
@@ -26,6 +29,7 @@
 
       <section aria-labelledby="browse-heading">
         <h2 id="browse-heading">Browse records</h2>
+
         <div class="record-links">
           <a class="record-card" data-app-page="tasks/index.html">
             <span class="card-icon" aria-hidden="true">T</span>
@@ -35,6 +39,7 @@
             </span>
             <span class="card-arrow" aria-hidden="true">&rarr;</span>
           </a>
+
           <a class="record-card" data-app-page="users/index.html">
             <span class="card-icon" aria-hidden="true">U</span>
             <span class="card-copy">
@@ -43,6 +48,7 @@
             </span>
             <span class="card-arrow" aria-hidden="true">&rarr;</span>
           </a>
+
           <a class="record-card" data-app-page="schedules/index.html">
             <span class="card-icon" aria-hidden="true">S</span>
             <span class="card-copy">
@@ -51,6 +57,7 @@
             </span>
             <span class="card-arrow" aria-hidden="true">&rarr;</span>
           </a>
+
           <a class="record-card" data-app-page="admin/tasks.html" data-admin-only hidden>
             <span class="card-icon" aria-hidden="true">T</span>
             <span class="card-copy">
@@ -59,6 +66,7 @@
             </span>
             <span class="card-arrow" aria-hidden="true">&rarr;</span>
           </a>
+
           <a class="record-card" data-app-page="admin/users.html" data-admin-only hidden>
             <span class="card-icon" aria-hidden="true">U</span>
             <span class="card-copy">
@@ -67,6 +75,7 @@
             </span>
             <span class="card-arrow" aria-hidden="true">&rarr;</span>
           </a>
+
           <a class="record-card" data-app-page="admin/schedules.html" data-admin-only hidden>
             <span class="card-icon" aria-hidden="true">S</span>
             <span class="card-copy">
@@ -78,12 +87,15 @@
         </div>
       </section>
     </main>
+
     <script>
       document.querySelectorAll("[data-app-page]").forEach((link) => {
         link.href = `${window.appContextPath}/${link.dataset.appPage}`;
       });
     </script>
+
     <output id="account-status" aria-live="polite"></output>
+
     <script type="module">
       const { initializeAccountNavigation } = await import(
         `${window.appContextPath}/shared/classes/AccountNavigation.js`

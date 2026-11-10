@@ -2,7 +2,7 @@ package business;
 
 import java.io.Serializable;
 
-public class User implements Serializable{
+public class User implements Serializable {
     private Integer userId;
     private String userName;
     private String firstName;
@@ -14,7 +14,8 @@ public class User implements Serializable{
     public User() {
     }
 
-    public User(Integer userId, String userName, String firstName, String lastName, String email, String passwordHash, String role) {
+    public User(Integer userId, String userName, String firstName, String lastName,
+            String email, String passwordHash, String role) {
         this.userId = userId;
         this.userName = userName;
         this.firstName = firstName;

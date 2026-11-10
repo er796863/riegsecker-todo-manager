@@ -19,6 +19,10 @@ export interface UserRecord {
 
 export interface ScheduleRecord {
 	notificationSettings: string;
+	notificationsEnabled: boolean;
+	notificationDays: string[];
+	notificationTime: string;
+	notificationTimezone: string;
 	tasks: Record<string, TaskRecord>;
 	user: UserRecord;
 }

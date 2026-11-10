@@ -42,15 +42,20 @@ public class AccountApiTest {
     public void registrationRejectsInvalidUsernameBeforeDatabaseAccess() throws Exception {
         when(request.getPathInfo()).thenReturn("/register");
         when(request.getContentType()).thenReturn("application/json");
-        when(request.getReader()).thenReturn(new java.io.BufferedReader(new StringReader(
+        when(request.getReader()).thenReturn(new java.io.BufferedReader(
+            new StringReader(
                 "{\"username\":\"ab\",\"firstName\":\"Jane\",\"lastName\":\"Doe\","
-                        + "\"email\":\"jane@example.com\",\"password\":\"a-long-password\"}")));
+                + "\"email\":\"jane@example.com\",\"password\":\"a-long-password\"}"
+            )
+        ));
 
         api.doPost(request, response);
 
         verify(response).setStatus(HttpServletResponse.SC_BAD_REQUEST);
         assertEquals(
-                "{\"error\":\"Username must be 3-50 characters using letters, numbers, dots, underscores, or hyphens\"}",
-                responseBody.toString());
+            "{\"error\":\"Username must be 3-50 characters using letters, numbers, "
+                    + "dots, underscores, or hyphens\"}",
+            responseBody.toString()
+        );
     }
 }

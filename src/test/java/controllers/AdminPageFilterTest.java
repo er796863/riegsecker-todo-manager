@@ -3,7 +3,6 @@ package controllers;
 import business.User;
 import org.junit.Before;
 import org.junit.Test;
-
 import javax.servlet.FilterChain;
 import javax.servlet.ServletRequest;
 import javax.servlet.ServletResponse;
@@ -11,11 +10,12 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 
+import static data.TodoDB.isAdministrator;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.mockStatic;
 
 public class AdminPageFilterTest {
     private AdminPageFilter filter;
@@ -51,7 +51,7 @@ public class AdminPageFilterTest {
                 .thenReturn(new User(7, "jdoe", "Jane", "Doe", "jane@example.com", null, "USER"));
 
         try (var database = mockStatic(data.TodoDB.class)) {
-            database.when(() -> data.TodoDB.isAdministrator(7)).thenReturn(false);
+            database.when(() -> isAdministrator(7)).thenReturn(false);
 
             filter.doFilter(request, response, chain);
 
@@ -68,7 +68,7 @@ public class AdminPageFilterTest {
                 .thenReturn(new User(1, "admin", "Alex", "Rivera", "admin@example.com", null, "USER, ADMIN"));
 
         try (var database = mockStatic(data.TodoDB.class)) {
-            database.when(() -> data.TodoDB.isAdministrator(1)).thenReturn(true);
+            database.when(() -> isAdministrator(1)).thenReturn(true);
 
             filter.doFilter(request, response, chain);
 
@@ -83,7 +83,7 @@ public class AdminPageFilterTest {
         when(session.getAttribute(AccountApi.SESSION_USER))
                 .thenReturn(new User(1, "admin", "Alex", "Admin", "admin@example.com", null, "ADMIN"));
         try (var database = mockStatic(data.TodoDB.class)) {
-            database.when(() -> data.TodoDB.isAdministrator(1)).thenReturn(false);
+            database.when(() -> isAdministrator(1)).thenReturn(false);
 
             filter.doFilter(request, response, chain);
 

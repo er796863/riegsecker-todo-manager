@@ -7,7 +7,6 @@ import business.AccountCredentials;
 import business.InAppNotification;
 import business.NotificationSchedule;
 import business.NotificationTask;
-
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -25,12 +24,12 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.ToIntFunction;
-
 import javax.naming.NamingException;
 
 public class TodoDB {
     // language=MySQL
-    private static final String BASE_TASKS_QUERY = "SELECT task_id, task_title, task_description, date_created, date_due FROM tasks";
+    private static final String BASE_TASKS_QUERY = "SELECT task_id, task_title, task_description, "
+            + "date_created, date_due FROM tasks";
 
     // language=MySQL
     private static final String SELECT_TASK_QUERY = BASE_TASKS_QUERY
@@ -42,10 +41,12 @@ public class TodoDB {
 
     // language=MySQL
     private static final String SEARCH_TASKS_QUERY = BASE_TASKS_QUERY
-            + " WHERE (? IS NULL OR user_id = ?) AND CONCAT_WS(' ', CAST(task_id AS CHAR), task_title, task_description) "
+            + " WHERE (? IS NULL OR user_id = ?) "
+            + "AND CONCAT_WS(' ', CAST(task_id AS CHAR), task_title, task_description) "
             + "LIKE ? ORDER BY task_id";
 
-    private static final String USER_ROLE_QUERY = "COALESCE((SELECT GROUP_CONCAT(ur.role_name ORDER BY ur.role_name SEPARATOR ', ') "
+    private static final String USER_ROLE_QUERY = "COALESCE((SELECT GROUP_CONCAT(ur.role_name "
+            + "ORDER BY ur.role_name SEPARATOR ', ') "
             + "FROM user_roles ur WHERE ur.username = users.username), 'USER') AS user_role";
     private static final String BASE_USERS_QUERY = "SELECT user_id, username, first_name, last_name, email, "
             + USER_ROLE_QUERY + " FROM users";
@@ -61,7 +62,8 @@ public class TodoDB {
     private static final String SEARCH_USERS_QUERY = BASE_USERS_QUERY
             + " WHERE (? IS NULL OR user_id = ?) AND CONCAT_WS(' ', username, first_name, last_name, email, "
             + "COALESCE((SELECT GROUP_CONCAT(ur.role_name ORDER BY ur.role_name SEPARATOR ', ') "
-            + "FROM user_roles ur WHERE ur.username = users.username), 'USER')) LIKE ? ORDER BY user_id";
+            + "FROM user_roles ur WHERE ur.username = users.username), 'USER')) "
+            + "LIKE ? ORDER BY user_id";
 
     // language=MySQL
     private static final String SCHEDULES_BASE_QUERY = "SELECT s.notification_setting AS notificationSettings, "
@@ -126,14 +128,17 @@ public class TodoDB {
             ToIntFunction<T> getId, BiConsumer<T, T> merge) throws SQLException {
         try (ResultSet rs = ps.executeQuery()) {
             LinkedHashMap<Integer, T> entities = new LinkedHashMap<>();
+
             while (rs.next()) {
                 T entity = mapper.mapRow(rs);
                 Integer id = getId.applyAsInt(entity);
                 T existing = entities.putIfAbsent(id, entity);
+
                 if (existing != null) {
                     merge.accept(existing, entity);
                 }
             }
+
             return entities;
         }
     }
@@ -187,9 +192,11 @@ public class TodoDB {
     private static <T> T selectEntity(Integer id, Integer ownerId, String query, RowMapper<T> mapper,
             ToIntFunction<T> getId, BiConsumer<T, T> merge) throws NamingException, SQLException {
         ConnectionPool pool = ConnectionPool.getInstance();
+
         try (Connection connection = pool.getConnection(); PreparedStatement ps = connection.prepareStatement(query)) {
             setNullableInteger(ps, 1, ownerId);
             setNullableInteger(ps, 2, ownerId);
+
             ps.setObject(3, id);
             return buildEntities(ps, mapper, getId, merge).get(id);
         }
@@ -210,9 +217,11 @@ public class TodoDB {
     private static <T> Map<Integer, T> selectEntities(Integer ownerId, String query, RowMapper<T> mapper,
             ToIntFunction<T> getId, BiConsumer<T, T> merge) throws NamingException, SQLException {
         ConnectionPool pool = ConnectionPool.getInstance();
+
         try (Connection connection = pool.getConnection(); PreparedStatement ps = connection.prepareStatement(query)) {
             setNullableInteger(ps, 1, ownerId);
             setNullableInteger(ps, 2, ownerId);
+
             return buildEntities(ps, mapper, getId, merge);
         }
     }
@@ -229,6 +238,7 @@ public class TodoDB {
             setNullableInteger(ps, 1, ownerId);
             setNullableInteger(ps, 2, ownerId);
             ps.setString(3, "%" + search.trim() + "%");
+
             return buildEntities(ps, mapper, getId, merge);
         }
     }
@@ -313,6 +323,7 @@ public class TodoDB {
     public static int createTask(Integer userId, Task task) throws NamingException, SQLException {
         String query = "INSERT INTO tasks (user_id, task_title, task_description, date_due) VALUES (?, ?, ?, ?)";
         ConnectionPool pool = ConnectionPool.getInstance();
+
         try (Connection connection = pool.getConnection();
                 PreparedStatement ps = connection.prepareStatement(query, java.sql.Statement.RETURN_GENERATED_KEYS)) {
             ps.setInt(1, userId);
@@ -320,10 +331,12 @@ public class TodoDB {
             ps.setString(3, task.getTaskDescription());
             setTimestamp(ps, 4, task.getTaskDateDue());
             ps.executeUpdate();
+
             try (ResultSet keys = ps.getGeneratedKeys()) {
                 if (!keys.next()) {
                     throw new SQLException("Database did not return a new task ID.");
                 }
+
                 return keys.getInt(1);
             }
         }
@@ -334,6 +347,7 @@ public class TodoDB {
         String query = "UPDATE tasks SET task_title = ?, task_description = ?, date_due = ? "
                 + "WHERE task_id = ? AND (? IS NULL OR user_id = ?)";
         ConnectionPool pool = ConnectionPool.getInstance();
+
         try (Connection connection = pool.getConnection(); PreparedStatement ps = connection.prepareStatement(query)) {
             ps.setString(1, task.getTaskTitle());
             ps.setString(2, task.getTaskDescription());
@@ -341,16 +355,19 @@ public class TodoDB {
             ps.setInt(4, id);
             setNullableInteger(ps, 5, ownerId);
             setNullableInteger(ps, 6, ownerId);
+
             if (ps.executeUpdate() == 1) {
                 return true;
             }
         }
+
         try (Connection connection = pool.getConnection();
                 PreparedStatement ps = connection.prepareStatement(
                         "SELECT 1 FROM tasks WHERE task_id = ? AND (? IS NULL OR user_id = ?)")) {
             ps.setInt(1, id);
             setNullableInteger(ps, 2, ownerId);
             setNullableInteger(ps, 3, ownerId);
+
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
             }
@@ -360,10 +377,12 @@ public class TodoDB {
     public static boolean deleteTask(Integer id, Integer ownerId) throws NamingException, SQLException {
         String query = "DELETE FROM tasks WHERE task_id = ? AND (? IS NULL OR user_id = ?)";
         ConnectionPool pool = ConnectionPool.getInstance();
+
         try (Connection connection = pool.getConnection(); PreparedStatement ps = connection.prepareStatement(query)) {
             ps.setInt(1, id);
             setNullableInteger(ps, 2, ownerId);
             setNullableInteger(ps, 3, ownerId);
+
             return ps.executeUpdate() == 1;
         }
     }
@@ -410,6 +429,7 @@ public class TodoDB {
         String insertUser = "INSERT INTO users (username, first_name, last_name, email, password_hash) "
                 + "VALUES (?, ?, ?, ?, ?)";
         ConnectionPool pool = ConnectionPool.getInstance();
+
         try (Connection connection = pool.getConnection()) {
             connection.setAutoCommit(false);
             try {
@@ -422,24 +442,33 @@ public class TodoDB {
                     ps.setString(4, email);
                     ps.setString(5, passwordHash);
                     ps.executeUpdate();
+
                     try (ResultSet keys = ps.getGeneratedKeys()) {
                         if (!keys.next()) {
                             throw new SQLException("Database did not return a new account ID.");
                         }
+
                         userId = keys.getInt(1);
                     }
                 }
-                try (PreparedStatement ps = connection.prepareStatement(
-                        "INSERT INTO user_roles (username, role_name) VALUES (?, ?)");
-                        PreparedStatement schedule = connection.prepareStatement(
-                                "INSERT INTO schedules (user_id, notification_setting, "
-                                        + "notification_checked_at_utc) VALUES (?, 'NONE', UTC_TIMESTAMP())")) {
+
+                try (
+                    PreparedStatement ps = connection.prepareStatement(
+                        "INSERT INTO user_roles (username, role_name) VALUES (?, ?)"
+                    );
+                    PreparedStatement schedule = connection.prepareStatement(
+                        "INSERT INTO schedules (user_id, notification_setting, "
+                        + "notification_checked_at_utc) VALUES (?, 'NONE', UTC_TIMESTAMP())"
+                    )
+                ) {
                     ps.setString(1, username);
                     ps.setString(2, role);
                     ps.executeUpdate();
+
                     schedule.setInt(1, userId);
                     schedule.executeUpdate();
                 }
+
                 connection.commit();
                 return new User(userId, username, firstName, lastName, email, null, role);
             } catch (SQLException | RuntimeException exception) {
@@ -456,17 +485,21 @@ public class TodoDB {
         String update = "UPDATE users SET username = ?, first_name = ?, last_name = ?, email = ?, "
                 + "password_hash = COALESCE(?, password_hash) WHERE user_id = ?";
         ConnectionPool pool = ConnectionPool.getInstance();
+
         try (Connection connection = pool.getConnection()) {
             connection.setAutoCommit(false);
             try {
                 UserAdminStatus status = lockUserAdminStatus(connection, id);
+
                 if (status == null) {
                     connection.rollback();
                     return false;
                 }
+
                 if (status.isAdmin() && !"ADMIN".equals(role) && status.adminCount() <= 1) {
                     throw new IllegalArgumentException("The last administrator cannot be demoted");
                 }
+
                 try (PreparedStatement ps = connection.prepareStatement(update)) {
                     ps.setString(1, username);
                     ps.setString(2, firstName);
@@ -476,16 +509,22 @@ public class TodoDB {
                     ps.setInt(6, id);
                     ps.executeUpdate();
                 }
-                try (PreparedStatement deleteRole = connection.prepareStatement(
-                        "DELETE FROM user_roles WHERE username = ?");
-                        PreparedStatement insertRole = connection.prepareStatement(
-                                "INSERT INTO user_roles (username, role_name) VALUES (?, ?)")) {
+
+                try (
+                    PreparedStatement deleteRole = connection.prepareStatement(
+                        "DELETE FROM user_roles WHERE username = ?"
+                    );
+                    PreparedStatement insertRole = connection.prepareStatement(
+                        "INSERT INTO user_roles (username, role_name) VALUES (?, ?)"
+                    )
+                ) {
                     deleteRole.setString(1, username);
                     deleteRole.executeUpdate();
                     insertRole.setString(1, username);
                     insertRole.setString(2, role);
                     insertRole.executeUpdate();
                 }
+
                 connection.commit();
                 return true;
             } catch (SQLException | RuntimeException exception) {
@@ -503,16 +542,20 @@ public class TodoDB {
             connection.setAutoCommit(false);
             try {
                 UserAdminStatus status = lockUserAdminStatus(connection, id);
+
                 if (status == null || id.equals(actorId)) {
                     connection.rollback();
                     return false;
                 }
+
                 if (status.isAdmin() && status.adminCount() <= 1) {
                     throw new IllegalArgumentException("The last administrator cannot be deleted");
                 }
+
                 try (PreparedStatement ps = connection.prepareStatement("DELETE FROM users WHERE user_id = ?")) {
                     ps.setInt(1, id);
                     boolean deleted = ps.executeUpdate() == 1;
+
                     connection.commit();
                     return deleted;
                 }
@@ -530,21 +573,30 @@ public class TodoDB {
 
     private static UserAdminStatus lockUserAdminStatus(Connection connection, Integer id) throws SQLException {
         String username;
-        try (PreparedStatement ps = connection.prepareStatement(
-                "SELECT username FROM users WHERE user_id = ? FOR UPDATE")) {
+        try (
+            PreparedStatement ps = connection.prepareStatement(
+                "SELECT username FROM users WHERE user_id = ? FOR UPDATE"
+            )
+        ) {
             ps.setInt(1, id);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
                     return null;
                 }
+
                 username = rs.getString("username");
             }
         }
+
         int adminCount = 0;
         boolean isAdmin = false;
-        try (PreparedStatement ps = connection.prepareStatement(
-                "SELECT username FROM user_roles WHERE role_name = 'ADMIN' FOR UPDATE");
-                ResultSet rs = ps.executeQuery()) {
+
+        try (
+            PreparedStatement ps = connection.prepareStatement(
+                "SELECT username FROM user_roles WHERE role_name = 'ADMIN' FOR UPDATE"
+            );
+            ResultSet rs = ps.executeQuery()
+        ) {
             while (rs.next()) {
                 adminCount++;
                 if (username.equals(rs.getString("username"))) {
@@ -552,6 +604,7 @@ public class TodoDB {
                 }
             }
         }
+
         return new UserAdminStatus(isAdmin, adminCount);
     }
 
@@ -574,11 +627,14 @@ public class TodoDB {
         try (Connection connection = pool.getConnection()) {
             connection.setAutoCommit(false);
             try {
-                try (PreparedStatement ps = connection.prepareStatement(
+                try (
+                    PreparedStatement ps = connection.prepareStatement(
                         "INSERT INTO schedules (user_id, notification_setting, notification_enabled, "
-                                + "notification_days, notification_time, notification_timezone, "
-                                + "notification_checked_at_utc) "
-                                + "VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())")) {
+                        + "notification_days, notification_time, notification_timezone, "
+                        + "notification_checked_at_utc) "
+                        + "VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())"
+                    )
+                ) {
                     ps.setInt(1, userId);
                     ps.setString(2, notificationSettings);
                     ps.setBoolean(3, enabled);
@@ -587,9 +643,11 @@ public class TodoDB {
                     ps.setString(6, timezone);
                     ps.executeUpdate();
                 }
+
                 if (taskIds != null) {
                     insertScheduleTasks(connection, userId, taskIds);
                 }
+
                 connection.commit();
                 return true;
             } catch (SQLException | RuntimeException exception) {
@@ -618,6 +676,7 @@ public class TodoDB {
                         + "notification_days = ?, notification_time = ?, notification_timezone = ?, "
                         + "notification_checked_at_utc = UTC_TIMESTAMP() "
                         + "WHERE user_id = ? AND (? IS NULL OR user_id = ?)";
+
                 try (PreparedStatement ps = connection.prepareStatement(update)) {
                     ps.setString(1, notificationSettings);
                     ps.setBoolean(2, enabled);
@@ -627,32 +686,45 @@ public class TodoDB {
                     ps.setInt(6, userId);
                     setNullableInteger(ps, 7, ownerId);
                     setNullableInteger(ps, 8, ownerId);
+
                     if (ps.executeUpdate() != 1) {
                         boolean exists;
-                        try (PreparedStatement check = connection.prepareStatement(
-                                "SELECT 1 FROM schedules WHERE user_id = ? AND (? IS NULL OR user_id = ?)")) {
+                        try (
+                            PreparedStatement check = connection.prepareStatement(
+                                "SELECT 1 FROM schedules WHERE user_id = ? AND (? IS NULL OR user_id = ?)"
+                            )
+                        ) {
                             check.setInt(1, userId);
+
                             setNullableInteger(check, 2, ownerId);
                             setNullableInteger(check, 3, ownerId);
+
                             try (ResultSet rs = check.executeQuery()) {
                                 exists = rs.next();
                             }
                         }
+
                         if (!exists) {
                             connection.rollback();
                             return false;
                         }
                     }
                 }
+
                 if (taskIds != null) {
-                    try (PreparedStatement ps = connection.prepareStatement(
+                    try (
+                        PreparedStatement ps = connection.prepareStatement(
                             "DELETE st FROM schedule_tasks st JOIN schedules s ON s.schedule_id = st.schedule_id "
-                                    + "WHERE s.user_id = ?")) {
+                            + "WHERE s.user_id = ?"
+                        )
+                    ) {
                         ps.setInt(1, userId);
                         ps.executeUpdate();
                     }
+
                     insertScheduleTasks(connection, userId, taskIds);
                 }
+
                 connection.commit();
                 return true;
             } catch (SQLException | RuntimeException exception) {
@@ -666,17 +738,21 @@ public class TodoDB {
 
     private static void insertScheduleTasks(Connection connection, Integer userId, List<Integer> taskIds)
             throws SQLException {
-        try (PreparedStatement ps = connection.prepareStatement(
+        try (
+            PreparedStatement ps = connection.prepareStatement(
                 "INSERT INTO schedule_tasks (schedule_id, task_id) "
-                        + "SELECT s.schedule_id, t.task_id FROM schedules s "
-                        + "JOIN tasks t ON t.user_id = s.user_id AND t.task_id = ? "
-                        + "WHERE s.user_id = ?")) {
+                + "SELECT s.schedule_id, t.task_id FROM schedules s "
+                + "JOIN tasks t ON t.user_id = s.user_id AND t.task_id = ? "
+                + "WHERE s.user_id = ?"
+            )
+        ) {
             for (Integer taskId : taskIds) {
                 ps.setInt(1, taskId);
                 ps.setInt(2, userId);
                 if (ps.executeUpdate() != 1) {
                     throw new IllegalArgumentException(
-                            "Every scheduled task must belong to the schedule's user");
+                        "Every scheduled task must belong to the schedule's user"
+                    );
                 }
             }
         }
@@ -687,6 +763,7 @@ public class TodoDB {
         for (String day : days) {
             mask |= 1 << (DayOfWeek.valueOf(day).getValue() - 1);
         }
+
         return mask;
     }
 
@@ -698,6 +775,7 @@ public class TodoDB {
         if ("WEEKLY".equalsIgnoreCase(settings)) {
             return List.of("MONDAY");
         }
+
         return List.of("MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY");
     }
 
@@ -705,10 +783,15 @@ public class TodoDB {
             throws NamingException, SQLException {
         String query = "DELETE FROM schedules WHERE user_id = ? AND (? IS NULL OR user_id = ?)";
         ConnectionPool pool = ConnectionPool.getInstance();
-        try (Connection connection = pool.getConnection(); PreparedStatement ps = connection.prepareStatement(query)) {
+
+        try (
+            Connection connection = pool.getConnection();
+            PreparedStatement ps = connection.prepareStatement(query)
+        ) {
             ps.setInt(1, userId);
             setNullableInteger(ps, 2, ownerId);
             setNullableInteger(ps, 3, ownerId);
+
             return ps.executeUpdate() == 1;
         }
     }
@@ -733,15 +816,18 @@ public class TodoDB {
             Task task = buildTask(rs);
             tasks.put(taskId, task);
         }
+
         String notificationSettings = rs.getString("notificationSettings");
         boolean notificationsEnabled = rs.getBoolean("notificationsEnabled");
         int dayMask = rs.getInt("notificationDaysMask");
+
         List<String> notificationDays = new java.util.ArrayList<>();
         for (DayOfWeek day : DayOfWeek.values()) {
             if ((dayMask & 1 << (day.getValue() - 1)) != 0) {
                 notificationDays.add(day.name());
             }
         }
+
         String notificationTime = rs.getString("notificationTime");
         String notificationTimezone = rs.getString("notificationTimezone");
 
@@ -782,20 +868,24 @@ public class TodoDB {
     /**
      * Searches for schedules, keyed by user ID.
      */
-    public static Map<Integer, Schedule> searchSchedules(String search, Integer ownerId) throws NamingException, SQLException {
+    public static Map<Integer, Schedule> searchSchedules(String search, Integer ownerId)
+            throws NamingException, SQLException {
         return searchEntities(search, ownerId, SEARCH_SCHEDULES_QUERY, SELECT_SCHEDULES_QUERY,
                 TodoDB::buildSchedule, TodoDB::scheduleUserId, TodoDB::mergeScheduleTasks);
     }
 
     public static AccountCredentials findAccount(String username) throws NamingException, SQLException {
         ConnectionPool pool = ConnectionPool.getInstance();
-        try (Connection connection = pool.getConnection();
-                PreparedStatement ps = connection.prepareStatement(ACCOUNT_QUERY)) {
+        try (
+            Connection connection = pool.getConnection();
+            PreparedStatement ps = connection.prepareStatement(ACCOUNT_QUERY)
+        ) {
             ps.setString(1, username);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
                     return null;
                 }
+
                 return new AccountCredentials(buildUser(rs), rs.getString("password_hash"));
             }
         }
@@ -805,8 +895,12 @@ public class TodoDB {
         String query = "SELECT EXISTS (SELECT 1 FROM users u "
                 + "JOIN user_roles ur ON ur.username = u.username "
                 + "WHERE u.user_id = ? AND ur.role_name = 'ADMIN')";
+
         ConnectionPool pool = ConnectionPool.getInstance();
-        try (Connection connection = pool.getConnection(); PreparedStatement ps = connection.prepareStatement(query)) {
+        try (
+            Connection connection = pool.getConnection();
+            PreparedStatement ps = connection.prepareStatement(query)
+        ) {
             ps.setInt(1, userId);
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next() && rs.getBoolean(1);
@@ -817,9 +911,12 @@ public class TodoDB {
     public static void updatePasswordHash(String username, String passwordHash)
             throws NamingException, SQLException {
         ConnectionPool pool = ConnectionPool.getInstance();
-        try (Connection connection = pool.getConnection();
-                PreparedStatement ps = connection.prepareStatement(
-                        "UPDATE users SET password_hash = ? WHERE username = ?")) {
+        try (
+            Connection connection = pool.getConnection();
+            PreparedStatement ps = connection.prepareStatement(
+                "UPDATE users SET password_hash = ? WHERE username = ?"
+            )
+        ) {
             ps.setString(1, passwordHash);
             ps.setString(2, username);
             ps.executeUpdate();
@@ -844,14 +941,18 @@ public class TodoDB {
                 + "LEFT JOIN tasks t ON t.task_id = st.task_id AND t.user_id = s.user_id "
                 + "WHERE s.user_id = ? "
                 + "ORDER BY (t.date_due IS NULL), t.date_due, t.task_id LIMIT 10";
+
         ConnectionPool pool = ConnectionPool.getInstance();
-        try (Connection connection = pool.getConnection();
-                PreparedStatement ps = connection.prepareStatement(query)) {
+        try (
+            Connection connection = pool.getConnection();
+            PreparedStatement ps = connection.prepareStatement(query)
+        ) {
             ps.setInt(1, userId);
             try (ResultSet rs = ps.executeQuery()) {
                 if (!rs.next()) {
                     return null;
                 }
+
                 Integer scheduleId = rs.getInt("schedule_id");
                 boolean enabled = rs.getBoolean("notification_enabled");
                 int daysMask = rs.getInt("notification_days");
@@ -859,16 +960,21 @@ public class TodoDB {
                 String timezone = rs.getString("notification_timezone");
                 LocalDateTime checkedAtUtc = LocalDateTime.parse(rs.getString("checked_at_utc"));
                 int taskCount = rs.getInt("task_count");
+
                 List<NotificationTask> tasks = new ArrayList<>();
                 do {
                     Integer taskId = rs.getObject("task_id", Integer.class);
                     if (taskId != null) {
-                        tasks.add(new NotificationTask(
+                        tasks.add(
+                            new NotificationTask(
                                 taskId,
                                 rs.getString("task_title"),
-                                rs.getString("task_date_due")));
+                                rs.getString("task_date_due")
+                            )
+                        );
                     }
                 } while (rs.next());
+
                 return new NotificationSchedule(
                         scheduleId, enabled, daysMask, time, timezone, checkedAtUtc, taskCount, tasks);
             }
@@ -884,10 +990,13 @@ public class TodoDB {
             connection.setAutoCommit(false);
             try {
                 int notificationId;
-                try (PreparedStatement ps = connection.prepareStatement(
+                try (
+                    PreparedStatement ps = connection.prepareStatement(
                         "INSERT INTO notifications (user_id, schedule_id, scheduled_date, scheduled_time, "
-                                + "notification_timezone, additional_task_count) VALUES (?, ?, ?, ?, ?, ?)",
-                        java.sql.Statement.RETURN_GENERATED_KEYS)) {
+                        + "notification_timezone, additional_task_count) VALUES (?, ?, ?, ?, ?, ?)",
+                        java.sql.Statement.RETURN_GENERATED_KEYS
+                    )
+                ) {
                     ps.setInt(1, userId);
                     ps.setInt(2, scheduleId);
                     ps.setDate(3, java.sql.Date.valueOf(scheduledDate));
@@ -895,38 +1004,52 @@ public class TodoDB {
                     ps.setString(5, timezone);
                     ps.setInt(6, additionalTaskCount);
                     ps.executeUpdate();
+
                     try (ResultSet keys = ps.getGeneratedKeys()) {
                         if (!keys.next()) {
                             throw new SQLException("Notification insert did not return an ID");
                         }
+
                         notificationId = keys.getInt(1);
                     }
                 }
-                try (PreparedStatement ps = connection.prepareStatement(
+
+                try (
+                    PreparedStatement ps = connection.prepareStatement(
                         "INSERT INTO notification_tasks "
-                                + "(notification_id, task_id, task_title, task_date_due) VALUES (?, ?, ?, ?)")) {
+                        + "(notification_id, task_id, task_title, task_date_due) VALUES (?, ?, ?, ?)"
+                    )
+                ) {
                     for (NotificationTask task : tasks) {
                         ps.setInt(1, notificationId);
                         ps.setInt(2, task.taskId());
                         ps.setString(3, task.taskTitle());
+
                         if (task.taskDateDue() == null) {
                             ps.setNull(4, Types.TIMESTAMP);
                         } else {
                             ps.setTimestamp(4, Timestamp.valueOf(LocalDateTime.parse(task.taskDateDue())));
                         }
+
                         ps.addBatch();
                     }
+
                     ps.executeBatch();
                 }
-                try (PreparedStatement ps = connection.prepareStatement(
+                try (
+                    PreparedStatement ps = connection.prepareStatement(
                         "UPDATE schedules SET notification_checked_at_utc = UTC_TIMESTAMP() "
-                                + "WHERE schedule_id = ? AND user_id = ?")) {
+                        + "WHERE schedule_id = ? AND user_id = ?"
+                    )
+                ) {
                     ps.setInt(1, scheduleId);
                     ps.setInt(2, userId);
+
                     if (ps.executeUpdate() != 1) {
                         throw new SQLException("Unable to advance notification schedule");
                     }
                 }
+
                 connection.commit();
                 return true;
             } catch (SQLException exception) {
@@ -935,6 +1058,7 @@ public class TodoDB {
                         && exception.getMessage().contains("uq_notifications_schedule_date")) {
                     return false;
                 }
+
                 throw exception;
             } catch (RuntimeException exception) {
                 connection.rollback();
@@ -947,9 +1071,12 @@ public class TodoDB {
 
     public static void advanceNotificationCheck(Integer userId) throws NamingException, SQLException {
         ConnectionPool pool = ConnectionPool.getInstance();
-        try (Connection connection = pool.getConnection();
-                PreparedStatement ps = connection.prepareStatement(
-                        "UPDATE schedules SET notification_checked_at_utc = UTC_TIMESTAMP() WHERE user_id = ?")) {
+        try (
+            Connection connection = pool.getConnection();
+            PreparedStatement ps = connection.prepareStatement(
+                "UPDATE schedules SET notification_checked_at_utc = UTC_TIMESTAMP() WHERE user_id = ?"
+            )
+        ) {
             ps.setInt(1, userId);
             ps.executeUpdate();
         }
@@ -964,31 +1091,45 @@ public class TodoDB {
                 + "FROM notifications n LEFT JOIN notification_tasks nt ON nt.notification_id = n.notification_id "
                 + "WHERE n.user_id = ? ORDER BY n.scheduled_date DESC, n.notification_id DESC, "
                 + "(nt.task_date_due IS NULL), nt.task_date_due, nt.task_id";
+
         ConnectionPool pool = ConnectionPool.getInstance();
-        try (Connection connection = pool.getConnection(); PreparedStatement ps = connection.prepareStatement(query)) {
+        try (
+            Connection connection = pool.getConnection();
+            PreparedStatement ps = connection.prepareStatement(query)
+        ) {
             ps.setInt(1, userId);
             try (ResultSet rs = ps.executeQuery()) {
                 Map<Integer, InAppNotification> records = new LinkedHashMap<>();
                 while (rs.next()) {
                     Integer notificationId = rs.getInt("notification_id");
                     InAppNotification notification = records.get(notificationId);
+
                     if (notification == null) {
                         notification = new InAppNotification(
-                                notificationId,
-                                rs.getString("scheduled_date"),
-                                rs.getString("scheduled_time"),
-                                rs.getString("notification_timezone"),
-                                rs.getBoolean("is_read"),
-                                rs.getInt("additional_task_count"),
-                                new ArrayList<>());
+                            notificationId,
+                            rs.getString("scheduled_date"),
+                            rs.getString("scheduled_time"),
+                            rs.getString("notification_timezone"),
+                            rs.getBoolean("is_read"),
+                            rs.getInt("additional_task_count"),
+                            new ArrayList<>()
+                        );
+
                         records.put(notificationId, notification);
                     }
+
                     Integer taskId = rs.getObject("task_id", Integer.class);
                     if (taskId != null) {
-                        notification.tasks().add(new NotificationTask(
-                                taskId, rs.getString("task_title"), rs.getString("task_date_due")));
+                        notification.tasks().add(
+                            new NotificationTask(
+                                taskId,
+                                rs.getString("task_title"),
+                                rs.getString("task_date_due")
+                            )
+                        );
                     }
                 }
+
                 return List.copyOf(records.values());
             }
         }
@@ -997,18 +1138,27 @@ public class TodoDB {
     public static boolean markNotificationRead(Integer notificationId, Integer userId)
             throws NamingException, SQLException {
         ConnectionPool pool = ConnectionPool.getInstance();
-        try (Connection connection = pool.getConnection();
-                PreparedStatement update = connection.prepareStatement(
-                        "UPDATE notifications SET is_read = TRUE WHERE notification_id = ? AND user_id = ?")) {
+        try (
+            Connection connection = pool.getConnection();
+            PreparedStatement update = connection.prepareStatement(
+                "UPDATE notifications SET is_read = TRUE WHERE notification_id = ? AND user_id = ?"
+            )
+        ) {
             update.setInt(1, notificationId);
             update.setInt(2, userId);
+
             if (update.executeUpdate() > 0) {
                 return true;
             }
-            try (PreparedStatement exists = connection.prepareStatement(
-                    "SELECT 1 FROM notifications WHERE notification_id = ? AND user_id = ?")) {
+
+            try (
+                PreparedStatement exists = connection.prepareStatement(
+                    "SELECT 1 FROM notifications WHERE notification_id = ? AND user_id = ?"
+                )
+            ) {
                 exists.setInt(1, notificationId);
                 exists.setInt(2, userId);
+
                 try (ResultSet rs = exists.executeQuery()) {
                     return rs.next();
                 }
@@ -1019,9 +1169,12 @@ public class TodoDB {
     public static boolean deleteNotification(Integer notificationId, Integer userId)
             throws NamingException, SQLException {
         ConnectionPool pool = ConnectionPool.getInstance();
-        try (Connection connection = pool.getConnection();
-                PreparedStatement ps = connection.prepareStatement(
-                        "DELETE FROM notifications WHERE notification_id = ? AND user_id = ?")) {
+        try (
+            Connection connection = pool.getConnection();
+            PreparedStatement ps = connection.prepareStatement(
+                "DELETE FROM notifications WHERE notification_id = ? AND user_id = ?"
+            )
+        ) {
             ps.setInt(1, notificationId);
             ps.setInt(2, userId);
             return ps.executeUpdate() == 1;
@@ -1030,9 +1183,12 @@ public class TodoDB {
 
     public static int clearNotifications(Integer userId) throws NamingException, SQLException {
         ConnectionPool pool = ConnectionPool.getInstance();
-        try (Connection connection = pool.getConnection();
-                PreparedStatement ps = connection.prepareStatement(
-                        "DELETE FROM notifications WHERE user_id = ?")) {
+        try (
+            Connection connection = pool.getConnection();
+            PreparedStatement ps = connection.prepareStatement(
+               "DELETE FROM notifications WHERE user_id = ?"
+            )
+        ) {
             ps.setInt(1, userId);
             return ps.executeUpdate();
         }

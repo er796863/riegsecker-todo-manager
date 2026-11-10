@@ -1,14 +1,11 @@
 package controllers;
 
 import business.Schedule;
-import business.PasswordHasher;
 import business.Task;
 import business.User;
 import data.TodoDB;
-
 import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
-
 import javax.naming.NamingException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -28,6 +25,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+
+import static business.PasswordHasher.hash;
+import static controllers.AccountApi.getSessionUser;
+import static controllers.AccountApi.validateProfile;
+import static data.TodoDB.createManagedUser;
+import static data.TodoDB.deleteManagedUser;
+import static data.TodoDB.isAdministrator;
+import static data.TodoDB.updateManagedUser;
 
 public class BusinessApi extends HttpServlet {
     private static final Gson GSON = new Gson();
@@ -70,35 +75,44 @@ public class BusinessApi extends HttpServlet {
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response) {
         response.setHeader("Cache-Control", "no-store");
+
         String path = request.getPathInfo();
         String entity = path == null ? "" : determineEntityFromPath(path);
         String search = request.getParameter("search");
+
         if (!TASKS.equals(entity) && !USERS.equals(entity) && !SCHEDULES.equals(entity)) {
             sendError(response, HttpServletResponse.SC_NOT_FOUND, "Unknown resource");
             return;
         }
 
-        User currentUser = AccountApi.getSessionUser(request);
+        User currentUser = getSessionUser(request);
+
         if (currentUser == null) {
             sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Sign in to view records");
             return;
         }
+
         String scope = request.getParameter("scope");
         boolean allRecords = "all".equalsIgnoreCase(scope);
+
         if (scope != null && !allRecords && !"mine".equalsIgnoreCase(scope)) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, "Scope must be mine or all");
             return;
         }
+
         if (allRecords && !hasAdminAccess(response, currentUser)) {
             return;
         }
+
         Integer ownerId = allRecords ? null : currentUser.getUserId();
         String requestedUserId = request.getParameter("userId");
+
         if (requestedUserId != null) {
             if (!allRecords) {
                 sendError(response, HttpServletResponse.SC_FORBIDDEN, "Administrator access required");
                 return;
             }
+
             try {
                 ownerId = Integer.valueOf(requestedUserId);
             } catch (NumberFormatException exception) {
@@ -123,13 +137,17 @@ public class BusinessApi extends HttpServlet {
     protected void doPost(HttpServletRequest request, HttpServletResponse response) {
         response.setHeader("Cache-Control", "no-store");
         String entity = entityFromRequest(request, response);
+
         if (entity == null) {
             return;
         }
+
         User currentUser = requireUser(request, response);
+
         if (currentUser == null) {
             return;
         }
+
         if (!isJson(request)) {
             sendError(response, HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE, "Send requests as JSON");
             return;
@@ -158,18 +176,24 @@ public class BusinessApi extends HttpServlet {
     protected void doPut(HttpServletRequest request, HttpServletResponse response) {
         response.setHeader("Cache-Control", "no-store");
         String entity = entityFromRequest(request, response);
+
         if (entity == null) {
             return;
         }
+
         User currentUser = requireUser(request, response);
+
         if (currentUser == null) {
             return;
         }
+
         if (!isJson(request)) {
             sendError(response, HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE, "Send requests as JSON");
             return;
         }
+
         Integer id = parseId(request, response);
+
         if (id == null) {
             return;
         }
@@ -197,14 +221,19 @@ public class BusinessApi extends HttpServlet {
     protected void doDelete(HttpServletRequest request, HttpServletResponse response) {
         response.setHeader("Cache-Control", "no-store");
         String entity = entityFromRequest(request, response);
+
         if (entity == null) {
             return;
         }
+
         User currentUser = requireUser(request, response);
+
         if (currentUser == null) {
             return;
         }
+
         Integer id = parseId(request, response);
+
         if (id == null) {
             return;
         }
@@ -228,31 +257,37 @@ public class BusinessApi extends HttpServlet {
     private String entityFromRequest(HttpServletRequest request, HttpServletResponse response) {
         String path = request.getPathInfo();
         String entity = path == null ? "" : determineEntityFromPath(path);
+
         if (!TASKS.equals(entity) && !USERS.equals(entity) && !SCHEDULES.equals(entity)) {
             sendError(response, HttpServletResponse.SC_NOT_FOUND, "Unknown resource");
             return null;
         }
+
         return entity;
     }
 
     private User requireUser(HttpServletRequest request, HttpServletResponse response) {
-        User currentUser = AccountApi.getSessionUser(request);
+        User currentUser = getSessionUser(request);
         if (currentUser == null) {
             sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Sign in to manage records");
         }
+
         return currentUser;
     }
 
     private RequestScope resolveScope(HttpServletRequest request, HttpServletResponse response, User user) {
         String scope = request.getParameter("scope");
         boolean allRecords = "all".equalsIgnoreCase(scope);
+
         if (scope != null && !allRecords && !"mine".equalsIgnoreCase(scope)) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, "Scope must be mine or all");
             return new RequestScope(false, null, false);
         }
+
         if (allRecords && !hasAdminAccess(response, user)) {
             return new RequestScope(false, null, false);
         }
+
         return new RequestScope(true, allRecords ? null : user.getUserId(), allRecords);
     }
 
@@ -265,8 +300,9 @@ public class BusinessApi extends HttpServlet {
             sendError(response, HttpServletResponse.SC_FORBIDDEN, "Administrator access required");
             return false;
         }
+
         try {
-            if (TodoDB.isAdministrator(user.getUserId())) {
+            if (isAdministrator(user.getUserId())) {
                 return true;
             }
         } catch (NamingException | SQLException exception) {
@@ -274,6 +310,7 @@ public class BusinessApi extends HttpServlet {
             sendError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Unable to verify permissions");
             return false;
         }
+
         sendError(response, HttpServletResponse.SC_FORBIDDEN, "Administrator access required");
         return false;
     }
@@ -284,24 +321,30 @@ public class BusinessApi extends HttpServlet {
             sendError(response, HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE, "Request body is too large");
             return null;
         }
+
         try {
             StringBuilder json = new StringBuilder();
             char[] buffer = new char[1024];
+
             try (BufferedReader reader = request.getReader()) {
                 int count;
                 while ((count = reader.read(buffer)) != -1) {
                     if (json.length() + count > 8192) {
                         sendError(response, HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE,
                                 "Request body is too large");
+
                         return null;
                     }
+
                     json.append(buffer, 0, count);
                 }
             }
+
             T body = GSON.fromJson(json.toString(), type);
             if (body == null) {
                 sendError(response, HttpServletResponse.SC_BAD_REQUEST, "A JSON request body is required");
             }
+
             return body;
         } catch (JsonParseException exception) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, "Invalid JSON request");
@@ -315,6 +358,7 @@ public class BusinessApi extends HttpServlet {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, "An entity ID is required");
             return null;
         }
+
         try {
             return Integer.valueOf(value);
         } catch (NumberFormatException exception) {
@@ -329,19 +373,23 @@ public class BusinessApi extends HttpServlet {
         if (body == null) {
             return;
         }
+
         RequestScope scope = resolveScope(request, response, currentUser);
         if (!scope.authorized()) {
             return;
         }
+
         String error = validateTask(body);
         if (error != null) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, error);
             return;
         }
+
         Integer ownerId = scope.ownerId() == null ? currentUser.getUserId() : scope.ownerId();
         if (scope.allRecords() && body.userId != null) {
             ownerId = body.userId;
         }
+
         int id = TodoDB.createTask(ownerId, taskFrom(body));
         response.setStatus(HttpServletResponse.SC_CREATED);
         sendJson(response, Map.of("taskId", id));
@@ -353,19 +401,23 @@ public class BusinessApi extends HttpServlet {
         if (body == null) {
             return;
         }
+
         RequestScope scope = resolveScope(request, response, currentUser);
         if (!scope.authorized()) {
             return;
         }
+
         String error = validateTask(body);
         if (error != null) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, error);
             return;
         }
+
         if (!TodoDB.updateTask(id, scope.ownerId(), taskFrom(body))) {
             sendError(response, HttpServletResponse.SC_NOT_FOUND, "Task not found");
             return;
         }
+
         sendJson(response, Map.of("updated", true));
     }
 
@@ -375,10 +427,12 @@ public class BusinessApi extends HttpServlet {
         if (!scope.authorized()) {
             return;
         }
+
         if (!TodoDB.deleteTask(id, scope.ownerId())) {
             sendError(response, HttpServletResponse.SC_NOT_FOUND, "Task not found");
             return;
         }
+
         sendJson(response, Map.of("deleted", true));
     }
 
@@ -388,24 +442,29 @@ public class BusinessApi extends HttpServlet {
         if (body == null) {
             return;
         }
+
         RequestScope scope = resolveScope(request, response, currentUser);
         if (!scope.authorized()) {
             return;
         }
+
         String error = validateSchedule(body);
         if (error != null) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, error);
             return;
         }
+
         String taskIdsError = validateTaskIds(body.taskIds);
         if (taskIdsError != null) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, taskIdsError);
             return;
         }
+
         Integer userId = scope.ownerId() == null ? currentUser.getUserId() : scope.ownerId();
         if (scope.allRecords() && body.userId != null) {
             userId = body.userId;
         }
+
         List<String> notificationDays = normalizeNotificationDays(body.notificationDays);
         if (!TodoDB.createSchedule(userId, notificationSetting(body.notificationsEnabled, notificationDays),
                 body.notificationsEnabled, notificationDays, body.notificationTime,
@@ -413,6 +472,7 @@ public class BusinessApi extends HttpServlet {
             sendError(response, HttpServletResponse.SC_CONFLICT, "A schedule already exists for this user");
             return;
         }
+
         response.setStatus(HttpServletResponse.SC_CREATED);
         sendJson(response, Map.of("userId", userId));
     }
@@ -423,20 +483,24 @@ public class BusinessApi extends HttpServlet {
         if (body == null) {
             return;
         }
+
         RequestScope scope = resolveScope(request, response, currentUser);
         if (!scope.authorized()) {
             return;
         }
+
         String error = validateSchedule(body);
         if (error != null) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, error);
             return;
         }
+
         String taskIdsError = validateTaskIds(body.taskIds);
         if (taskIdsError != null) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, taskIdsError);
             return;
         }
+
         List<String> notificationDays = normalizeNotificationDays(body.notificationDays);
         if (!TodoDB.updateSchedule(userId, scope.ownerId(),
                 notificationSetting(body.notificationsEnabled, notificationDays), body.notificationsEnabled,
@@ -444,6 +508,7 @@ public class BusinessApi extends HttpServlet {
             sendError(response, HttpServletResponse.SC_NOT_FOUND, "Schedule not found");
             return;
         }
+
         sendJson(response, Map.of("updated", true));
     }
 
@@ -453,10 +518,12 @@ public class BusinessApi extends HttpServlet {
         if (!scope.authorized()) {
             return;
         }
+
         if (!TodoDB.deleteSchedule(userId, scope.ownerId())) {
             sendError(response, HttpServletResponse.SC_NOT_FOUND, "Schedule not found");
             return;
         }
+
         sendJson(response, Map.of("deleted", true));
     }
 
@@ -465,17 +532,22 @@ public class BusinessApi extends HttpServlet {
         if (!requireAdmin(response, currentUser)) {
             return;
         }
+
         UserRequest body = readBody(request, response, UserRequest.class);
         if (body == null) {
             return;
         }
+
         String error = validateUser(body, true);
         if (error != null) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, error);
             return;
         }
-        User user = TodoDB.createManagedUser(body.username.trim(), body.firstName.trim(), body.lastName.trim(),
-                body.email.trim().toLowerCase(Locale.ROOT), PasswordHasher.hash(body.password), normalizeRole(body.role));
+
+        User user = createManagedUser(body.username.trim(), body.firstName.trim(), body.lastName.trim(),
+                body.email.trim().toLowerCase(Locale.ROOT), hash(body.password),
+                normalizeRole(body.role));
+
         response.setStatus(HttpServletResponse.SC_CREATED);
         sendJson(response, toJson(user));
     }
@@ -485,26 +557,32 @@ public class BusinessApi extends HttpServlet {
         if (!requireAdmin(response, currentUser)) {
             return;
         }
+
         if (id.equals(currentUser.getUserId())) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, "You cannot edit your own administrator account");
             return;
         }
+
         UserRequest body = readBody(request, response, UserRequest.class);
         if (body == null) {
             return;
         }
+
         String error = validateUser(body, false);
         if (error != null) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, error);
             return;
         }
+
         String passwordHash = body.password == null || body.password.isBlank()
-                ? null : PasswordHasher.hash(body.password);
-        if (!TodoDB.updateManagedUser(id, body.username.trim(), body.firstName.trim(), body.lastName.trim(),
+                ? null : hash(body.password);
+
+        if (!updateManagedUser(id, body.username.trim(), body.firstName.trim(), body.lastName.trim(),
                 body.email.trim().toLowerCase(Locale.ROOT), passwordHash, normalizeRole(body.role))) {
             sendError(response, HttpServletResponse.SC_NOT_FOUND, "User not found");
             return;
         }
+
         sendJson(response, Map.of("updated", true));
     }
 
@@ -513,14 +591,17 @@ public class BusinessApi extends HttpServlet {
         if (!requireAdmin(response, currentUser)) {
             return;
         }
+
         if (id.equals(currentUser.getUserId())) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, "You cannot delete your own administrator account");
             return;
         }
-        if (!TodoDB.deleteManagedUser(id, currentUser.getUserId())) {
+
+        if (!deleteManagedUser(id, currentUser.getUserId())) {
             sendError(response, HttpServletResponse.SC_NOT_FOUND, "User not found");
             return;
         }
+
         sendJson(response, Map.of("deleted", true));
     }
 
@@ -528,9 +609,11 @@ public class BusinessApi extends HttpServlet {
         if (body.taskTitle == null || body.taskTitle.isBlank() || body.taskTitle.trim().length() > 150) {
             return "Task title is required and must be no longer than 150 characters";
         }
+
         if (body.taskDescription != null && body.taskDescription.length() > 1000) {
             return "Task description must be no longer than 1000 characters";
         }
+
         parseDate(body.taskDateDue);
         return null;
     }
@@ -545,6 +628,7 @@ public class BusinessApi extends HttpServlet {
         if (value == null || value.isBlank()) {
             return null;
         }
+
         return LocalDateTime.parse(value);
     }
 
@@ -552,39 +636,48 @@ public class BusinessApi extends HttpServlet {
         if (body.notificationsEnabled == null) {
             return "Choose whether notifications are enabled";
         }
+
         if (body.notificationDays == null
                 || body.notificationDays.stream().anyMatch(day -> day == null
                         || !WEEKDAYS.contains(day.trim().toUpperCase(Locale.ROOT)))) {
             return "Choose valid days of the week";
         }
+
         List<String> normalizedDays = normalizeNotificationDays(body.notificationDays);
         if (normalizedDays.size() != body.notificationDays.size()) {
             return "Choose each day no more than once";
         }
+
         if (body.notificationsEnabled && normalizedDays.isEmpty()) {
             return "Select at least one day when notifications are enabled";
         }
+
         if (body.notificationTime == null || !body.notificationTime.matches("\\d{2}:\\d{2}")) {
             return "Enter a valid notification time";
         }
+
         try {
             LocalTime.parse(body.notificationTime);
         } catch (DateTimeException exception) {
             return "Enter a valid notification time";
         }
+
         if (body.notificationTimezone == null || body.notificationTimezone.isBlank()
                 || body.notificationTimezone.length() > 64) {
             return "A valid time zone is required";
         }
+
         try {
             String timezone = body.notificationTimezone.trim();
             if (!ZoneId.getAvailableZoneIds().contains(timezone)) {
                 return "Enter a valid IANA time zone";
             }
+
             ZoneId.of(timezone);
         } catch (DateTimeException exception) {
             return "Enter a valid IANA time zone";
         }
+
         return null;
     }
 
@@ -600,6 +693,7 @@ public class BusinessApi extends HttpServlet {
         if (!enabled) {
             return "NONE";
         }
+
         return days.size() == WEEKDAYS.size() ? "DAILY" : "WEEKLY";
     }
 
@@ -607,12 +701,15 @@ public class BusinessApi extends HttpServlet {
         if (taskIds == null) {
             return null;
         }
+
         if (taskIds.stream().anyMatch(id -> id == null || id <= 0)) {
             return "Task IDs must be positive integers";
         }
+
         if (taskIds.size() != taskIds.stream().distinct().count()) {
             return "Task IDs must be unique";
         }
+
         return null;
     }
 
@@ -621,19 +718,23 @@ public class BusinessApi extends HttpServlet {
         String firstName = body.firstName == null ? "" : body.firstName.trim();
         String lastName = body.lastName == null ? "" : body.lastName.trim();
         String email = body.email == null ? "" : body.email.trim();
-        String profileError = AccountApi.validateProfile(username, firstName, lastName, email);
+        String profileError = validateProfile(username, firstName, lastName, email);
+
         if (profileError != null) {
             return profileError;
         }
+
         if (requirePassword || (body.password != null && !body.password.isBlank())) {
             if (body.password == null || body.password.length() < 12
                     || body.password.getBytes(StandardCharsets.UTF_8).length > 72) {
                 return "Password must be at least 12 characters and no more than 72 UTF-8 bytes";
             }
         }
+
         if (body.role == null || !ROLES.contains(body.role.trim().toUpperCase(Locale.ROOT))) {
             return "Role must be USER or ADMIN";
         }
+
         return null;
     }
 
@@ -652,11 +753,13 @@ public class BusinessApi extends HttpServlet {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, exception.getMessage());
             return;
         }
+
         if (exception instanceof SQLException sqlException && sqlException.getSQLState() != null
                 && sqlException.getSQLState().startsWith("23")) {
             sendError(response, HttpServletResponse.SC_CONFLICT, "A record with these values already exists");
             return;
         }
+
         getServletContext().log("Unable to modify " + entity + " in the database", exception);
         sendError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Unable to modify records");
     }
@@ -665,11 +768,13 @@ public class BusinessApi extends HttpServlet {
         if (user == null || user.getRole() == null) {
             return false;
         }
+
         for (String role : user.getRole().split(",")) {
             if ("ADMIN".equalsIgnoreCase(role.trim())) {
                 return true;
             }
         }
+
         return false;
     }
 
@@ -699,11 +804,11 @@ public class BusinessApi extends HttpServlet {
     }
 
     private record EntityOperations<T>(
-            String type,
-            EntityFunctionWithArg<Integer, T> selectEntity,
-            EntityFunctionNoArg<T> selectEntities,
-            EntityFunctionWithArg<String, Map<Integer, T>> searchEntities,
-            Function<T, Map<String, Object>> toJson) {
+        String type,
+        EntityFunctionWithArg<Integer, T> selectEntity,
+        EntityFunctionNoArg<T> selectEntities,
+        EntityFunctionWithArg<String, Map<Integer, T>> searchEntities,
+        Function<T, Map<String, Object>> toJson) {
     }
 
     private static final EntityOperations<Task> TASK_OPERATIONS = new EntityOperations<>(
@@ -723,15 +828,18 @@ public class BusinessApi extends HttpServlet {
                     sendError(response, HttpServletResponse.SC_NOT_FOUND, "Entity not found");
                     return;
                 }
+
                 sendJson(response, operations.toJson().apply(entity));
                 return;
             }
 
             Map<Integer, Map<String, Object>> entities = new LinkedHashMap<>();
+
             (search == null
                     ? operations.selectEntities().apply(userId)
                     : operations.searchEntities().apply(search, userId))
                     .forEach((entityId, entity) -> entities.put(entityId, operations.toJson().apply(entity)));
+
             sendJson(response, entities);
         } catch (NamingException | SQLException exception) {
             handleDatabaseError(operations.type(), response, exception);
@@ -783,10 +891,13 @@ public class BusinessApi extends HttpServlet {
         result.put("notificationDays", schedule.getNotificationDays());
         result.put("notificationTime", schedule.getNotificationTime());
         result.put("notificationTimezone", schedule.getNotificationTimezone());
+
         Map<Integer, Map<String, Object>> tasks = new LinkedHashMap<>();
         schedule.getTasks().forEach((id, task) -> tasks.put(id, toJson(task)));
+
         result.put(TASKS, tasks);
         result.put("user", toJson(schedule.getUser()));
+
         return result;
     }
 

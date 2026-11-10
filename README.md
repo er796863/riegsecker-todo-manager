@@ -216,9 +216,9 @@ npm install
 npm test
 ```
 
-Use `npm run test:watch` during development to rerun the browser tests as files
-change. Check the shared browser JavaScript and record types with
-`npm run check:types`.
+`npm test` runs the browser tests and checks the shared browser JavaScript and
+record types. Use `npm run test:watch` during development to rerun the browser
+tests as files change.
 
 ---
 

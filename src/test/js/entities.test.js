@@ -139,8 +139,22 @@ describe("entity pages", () => {
       vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
-          1: { userId: 1, userName: "admin", firstName: "Alex", lastName: "Admin", email: "admin@example.com", role: "ADMIN" },
-          2: { userId: 2, userName: "jdoe", firstName: "Jane", lastName: "Doe", email: "jane@example.com", role: "USER" },
+          1: {
+            userId: 1,
+            userName: "admin",
+            firstName: "Alex",
+            lastName: "Admin",
+            email: "admin@example.com",
+            role: "ADMIN",
+          },
+          2: {
+            userId: 2,
+            userName: "jdoe",
+            firstName: "Jane",
+            lastName: "Doe",
+            email: "jane@example.com",
+            role: "USER",
+          },
         }),
       }),
     );

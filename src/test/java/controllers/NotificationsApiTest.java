@@ -6,7 +6,6 @@ import business.User;
 import data.TodoDB;
 import org.junit.Before;
 import org.junit.Test;
-
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
@@ -14,6 +13,9 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.List;
 
+import static data.TodoDB.clearNotifications;
+import static data.TodoDB.markNotificationRead;
+import static data.TodoDB.selectNotifications;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
@@ -46,11 +48,11 @@ public class NotificationsApiTest {
                 12, "2026-11-02", "09:00", "America/Denver", false, 1,
                 List.of(new NotificationTask(31, "Review project", null)));
         try (var database = mockStatic(TodoDB.class)) {
-            database.when(() -> TodoDB.selectNotifications(7)).thenReturn(List.of(notification));
+            database.when(() -> selectNotifications(7)).thenReturn(List.of(notification));
 
             api.doGet(request, response);
 
-            database.verify(() -> TodoDB.selectNotifications(7));
+            database.verify(() -> selectNotifications(7));
             assertEquals(
                     "[{\"notificationId\":12,\"scheduledDate\":\"2026-11-02\",\"scheduledTime\":\"09:00\","
                             + "\"notificationTimezone\":\"America/Denver\",\"read\":false,\"additionalTaskCount\":1,"
@@ -64,11 +66,11 @@ public class NotificationsApiTest {
         when(request.getPathInfo()).thenReturn("/read");
         when(request.getParameter("id")).thenReturn("12");
         try (var database = mockStatic(TodoDB.class)) {
-            database.when(() -> TodoDB.markNotificationRead(12, 7)).thenReturn(true);
+            database.when(() -> markNotificationRead(12, 7)).thenReturn(true);
 
             api.doPut(request, response);
 
-            database.verify(() -> TodoDB.markNotificationRead(12, 7));
+            database.verify(() -> markNotificationRead(12, 7));
             assertEquals("{\"read\":true}", responseBody.toString());
         }
     }
@@ -78,11 +80,11 @@ public class NotificationsApiTest {
         when(request.getPathInfo()).thenReturn(null);
         when(request.getParameter("id")).thenReturn(null);
         try (var database = mockStatic(TodoDB.class)) {
-            database.when(() -> TodoDB.clearNotifications(7)).thenReturn(3);
+            database.when(() -> clearNotifications(7)).thenReturn(3);
 
             api.doDelete(request, response);
 
-            database.verify(() -> TodoDB.clearNotifications(7));
+            database.verify(() -> clearNotifications(7));
             assertEquals("{\"deletedCount\":3}", responseBody.toString());
         }
     }

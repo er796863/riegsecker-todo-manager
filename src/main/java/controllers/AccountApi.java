@@ -1,12 +1,9 @@
 package controllers;
 
 import business.AccountCredentials;
-import business.PasswordHasher;
 import business.User;
 import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
-import data.TodoDB;
-
 import javax.naming.NamingException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -21,12 +18,21 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+import static business.PasswordHasher.hash;
+import static business.PasswordHasher.needsUpgrade;
+import static business.PasswordHasher.verify;
+import static data.TodoDB.createAccount;
+import static data.TodoDB.findAccount;
+import static data.TodoDB.updatePasswordHash;
+
 public class AccountApi extends HttpServlet {
     public static final String SESSION_USER = AccountApi.class.getName() + ".user";
 
     private static final Gson GSON = new Gson();
+
     private static final String DUMMY_PASSWORD_HASH =
             "$2a$12$8p9N.tnIKRvU0lebUNsGqO9AzSehd3AisiLpU7ruiJB8iypIZJvuu";
+
     private static final Pattern USERNAME = Pattern.compile("[A-Za-z0-9_.-]{3,50}");
     private static final Pattern EMAIL = Pattern.compile("[^\\s@]+@[^\\s@]+\\.[^\\s@]+");
 
@@ -41,22 +47,26 @@ public class AccountApi extends HttpServlet {
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response) {
         setNoStore(response);
+
         if (!"session".equals(path(request))) {
             sendError(response, HttpServletResponse.SC_NOT_FOUND, "Unknown account resource");
             return;
         }
 
         User user = getSessionUser(request);
+
         if (user == null) {
             sendJson(response, Map.of("authenticated", false));
             return;
         }
+
         sendJson(response, Map.of("authenticated", true, "user", userPayload(user)));
     }
 
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) {
         setNoStore(response);
+
         if (!isJson(request)) {
             sendError(response, HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE, "Send account requests as JSON");
             return;
@@ -77,29 +87,36 @@ public class AccountApi extends HttpServlet {
     private void login(HttpServletRequest request, HttpServletResponse response)
             throws NamingException, SQLException {
         AccountRequest body = readBody(request, response);
+
         if (body == null) {
             return;
         }
+
         String username = body.username == null ? "" : body.username.trim();
+
         if (username.isEmpty() || body.password == null || body.password.isEmpty()) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, "Username and password are required");
             return;
         }
+
         if (body.password.getBytes(StandardCharsets.UTF_8).length > 72) {
             sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Invalid username or password");
             return;
         }
 
-        AccountCredentials account = TodoDB.findAccount(username);
+        AccountCredentials account = findAccount(username);
         String storedHash = account == null ? DUMMY_PASSWORD_HASH : account.passwordHash();
-        boolean passwordMatches = PasswordHasher.verify(body.password, storedHash);
+        boolean passwordMatches = verify(body.password, storedHash);
+
         if (account == null || !passwordMatches) {
             sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Invalid username or password");
             return;
         }
-        if (PasswordHasher.needsUpgrade(storedHash)) {
-            TodoDB.updatePasswordHash(username, PasswordHasher.hash(body.password));
+
+        if (needsUpgrade(storedHash)) {
+            updatePasswordHash(username, hash(body.password));
         }
+
         startSession(request, account.user());
         sendJson(response, Map.of("user", userPayload(account.user())));
     }
@@ -107,6 +124,7 @@ public class AccountApi extends HttpServlet {
     private void register(HttpServletRequest request, HttpServletResponse response)
             throws NamingException, SQLException {
         AccountRequest body = readBody(request, response);
+
         if (body == null) {
             return;
         }
@@ -115,14 +133,17 @@ public class AccountApi extends HttpServlet {
         String firstName = body.firstName == null ? "" : body.firstName.trim();
         String lastName = body.lastName == null ? "" : body.lastName.trim();
         String email = body.email == null ? "" : body.email.trim().toLowerCase(Locale.ROOT);
+
         String validationError = validateRegistration(username, firstName, lastName, email, body.password);
+
         if (validationError != null) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, validationError);
             return;
         }
 
-        String passwordHash = PasswordHasher.hash(body.password);
-        User user = TodoDB.createAccount(username, firstName, lastName, email, passwordHash);
+        String passwordHash = hash(body.password);
+        User user = createAccount(username, firstName, lastName, email, passwordHash);
+
         startSession(request, user);
         response.setStatus(HttpServletResponse.SC_CREATED);
         sendJson(response, Map.of("user", userPayload(user)));
@@ -133,6 +154,7 @@ public class AccountApi extends HttpServlet {
         if (session != null) {
             session.invalidate();
         }
+
         sendJson(response, Map.of("authenticated", false));
     }
 
@@ -142,10 +164,12 @@ public class AccountApi extends HttpServlet {
         if (profileError != null) {
             return profileError;
         }
+
         if (password == null || password.length() < 12
                 || password.getBytes(StandardCharsets.UTF_8).length > 72) {
             return "Password must be at least 12 characters and no more than 72 UTF-8 bytes";
         }
+
         return null;
     }
 
@@ -153,13 +177,16 @@ public class AccountApi extends HttpServlet {
         if (!USERNAME.matcher(username).matches()) {
             return "Username must be 3-50 characters using letters, numbers, dots, underscores, or hyphens";
         }
+
         if (firstName.isBlank() || firstName.length() > 50
                 || lastName.isBlank() || lastName.length() > 50) {
             return "First and last names are required and must be no longer than 50 characters";
         }
+
         if (email.length() > 254 || !EMAIL.matcher(email).matches()) {
             return "Enter a valid email address";
         }
+
         return null;
     }
 
@@ -168,24 +195,30 @@ public class AccountApi extends HttpServlet {
             sendError(response, HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE, "Account request is too large");
             return null;
         }
+
         try {
             StringBuilder json = new StringBuilder();
             char[] buffer = new char[1024];
+
             try (BufferedReader reader = request.getReader()) {
                 int count;
                 while ((count = reader.read(buffer)) != -1) {
                     if (json.length() + count > 8192) {
                         sendError(response, HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE,
                                 "Account request is too large");
+
                         return null;
                     }
+
                     json.append(buffer, 0, count);
                 }
             }
+
             AccountRequest body = GSON.fromJson(json.toString(), AccountRequest.class);
             if (body == null) {
                 sendError(response, HttpServletResponse.SC_BAD_REQUEST, "A JSON request body is required");
             }
+
             return body;
         } catch (IOException | JsonParseException exception) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, "Invalid JSON request");
@@ -205,6 +238,7 @@ public class AccountApi extends HttpServlet {
         if (session == null) {
             return null;
         }
+
         Object value = session.getAttribute(SESSION_USER);
         return value instanceof User user ? user : null;
     }
@@ -214,6 +248,7 @@ public class AccountApi extends HttpServlet {
         if (path == null) {
             return "";
         }
+
         return path.startsWith("/") ? path.substring(1) : path;
     }
 
@@ -230,6 +265,7 @@ public class AccountApi extends HttpServlet {
             sendError(response, HttpServletResponse.SC_CONFLICT, "Username or email is already in use");
             return;
         }
+
         getServletContext().log("Unable to process account request", exception);
         sendError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Unable to process account request");
     }

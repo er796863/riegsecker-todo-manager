@@ -1,10 +1,7 @@
 package business;
 
-import data.TodoDB;
-
 import javax.naming.NamingException;
 import java.sql.SQLException;
-import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
@@ -13,20 +10,25 @@ import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.List;
 
+import static data.TodoDB.advanceNotificationCheck;
+import static data.TodoDB.createScheduledNotification;
+import static data.TodoDB.selectNotificationSchedule;
+
 public final class NotificationService {
     private static final int MAX_TASKS_PER_NOTIFICATION = 10;
 
     private NotificationService() {
     }
 
-    public static boolean processStartup(Integer userId, Instant now)
-            throws NamingException, SQLException {
-        NotificationSchedule schedule = TodoDB.selectNotificationSchedule(userId);
+    public static boolean processStartup(Integer userId, Instant now) throws NamingException, SQLException {
+        NotificationSchedule schedule = selectNotificationSchedule(userId);
+
         if (schedule == null) {
             return false;
         }
+
         if (!schedule.enabled() || schedule.taskCount() == 0) {
-            TodoDB.advanceNotificationCheck(userId);
+            advanceNotificationCheck(userId);
             return false;
         }
 
@@ -34,12 +36,13 @@ public final class NotificationService {
         ZonedDateTime scheduledAt = latestDueOccurrence(
                 now, schedule.daysMask(), schedule.time(), zone,
                 schedule.checkedAtUtc().toInstant(ZoneOffset.UTC));
+
         if (scheduledAt == null) {
             return false;
         }
 
         List<NotificationTask> tasks = tasksForNotification(schedule.tasks());
-        return TodoDB.createScheduledNotification(
+        return createScheduledNotification(
                 userId,
                 schedule.scheduleId(),
                 scheduledAt.toLocalDate(),
@@ -57,17 +60,22 @@ public final class NotificationService {
             LocalTime time, ZoneId zone, Instant after) {
         ZonedDateTime localNow = now.atZone(zone);
         LocalDate today = localNow.toLocalDate();
+
         for (int daysBack = 0; daysBack < 7; daysBack++) {
             LocalDate candidateDate = today.minusDays(daysBack);
             int dayBit = 1 << (candidateDate.getDayOfWeek().getValue() - 1);
+
             if ((daysMask & dayBit) == 0) {
                 continue;
             }
+
             ZonedDateTime candidate = candidateDate.atTime(time).atZone(zone);
+
             if (!candidate.toInstant().isAfter(now) && candidate.toInstant().isAfter(after)) {
                 return candidate;
             }
         }
+
         return null;
     }
 }

@@ -1,6 +1,7 @@
 import { initializeAccountNavigation } from "./classes/AccountNavigation.js";
 
 const contextPath = new URL("../", import.meta.url).pathname.replace(/\/$/, "");
+
 const form = document.querySelector("#account-form");
 const status = document.querySelector("#account-status");
 const submit = document.querySelector("#account-submit");
@@ -14,6 +15,7 @@ form.addEventListener("submit", async (event) => {
 	event.preventDefault();
 	status.textContent = "";
 	submit.disabled = true;
+
 	const values = Object.fromEntries(new FormData(form).entries());
 	const mode = form.dataset.mode;
 
@@ -24,17 +26,21 @@ form.addEventListener("submit", async (event) => {
 			credentials: "same-origin",
 			body: JSON.stringify(values),
 		});
+
 		const payload = await response.json();
+
 		if (!response.ok) {
 			throw new Error(payload.error || `Request failed (${response.status}).`);
 		}
 
 		const requestedNext = new URLSearchParams(window.location.search).get("next");
+
 		const safeNext = requestedNext
 			&& requestedNext.startsWith(`${contextPath}/`)
 			&& !requestedNext.startsWith("//")
 			? requestedNext
 			: `${contextPath}/`;
+
 		window.location.assign(safeNext);
 	} catch (error) {
 		status.textContent =

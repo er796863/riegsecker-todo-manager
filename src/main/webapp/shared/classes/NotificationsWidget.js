@@ -25,9 +25,11 @@ export function initializeNotificationsWidget(contextPath, accountNavigation) {
 	toggle.setAttribute("aria-expanded", "false");
 	toggle.setAttribute("aria-controls", "notification-panel");
 	toggle.setAttribute("aria-label", "Notifications");
+
 	const icon = document.createElement("span");
 	icon.setAttribute("aria-hidden", "true");
 	icon.textContent = "🔔";
+
 	const count = document.createElement("span");
 	count.className = "notification-count";
 	count.hidden = true;
@@ -38,27 +40,32 @@ export function initializeNotificationsWidget(contextPath, accountNavigation) {
 	panel.className = "notification-panel";
 	panel.hidden = true;
 	panel.setAttribute("aria-label", "Notifications");
+
 	const panelHeading = document.createElement("h2");
 	panelHeading.textContent = "Notifications";
+
 	const clearAll = document.createElement("button");
 	clearAll.type = "button";
 	clearAll.className = "notification-clear-all";
 	clearAll.textContent = "Clear all";
+
 	const header = document.createElement("div");
 	header.className = "notification-panel-header";
 	header.append(panelHeading, clearAll);
+
 	const status = document.createElement("output");
 	status.className = "notification-status";
 	status.setAttribute("aria-live", "polite");
+
 	const list = document.createElement("ul");
 	list.className = "notification-list";
 	panel.append(header, status, list);
 	root.append(toggle, panel);
+
 	accountNavigation.append(root);
 
 	const endpoint = `${contextPath}/api/notifications`;
-	/** @type {InAppNotification[]} */
-	let notifications = [];
+	/** @type {InAppNotification[]} */ let notifications = [];
 
 	/** @param {unknown} error */
 	const setError = (error) => {
@@ -78,13 +85,16 @@ export function initializeNotificationsWidget(contextPath, accountNavigation) {
 			credentials: "same-origin",
 			...options,
 		});
+
 		const payload = await response.json();
+
 		if (!response.ok) {
 			const message = typeof payload?.error === "string"
 				? payload.error
 				: `Request failed with status ${response.status}`;
 			throw new Error(message);
 		}
+
 		return payload;
 	};
 
@@ -96,10 +106,13 @@ export function initializeNotificationsWidget(contextPath, accountNavigation) {
 			if (processSchedule) {
 				await request(`${endpoint}/check`, { method: "POST" });
 			}
+
 			const payload = await request(endpoint);
+
 			if (!Array.isArray(payload) || !payload.every(isNotification)) {
 				throw new TypeError("The notification response is invalid.");
 			}
+
 			notifications = payload;
 			render();
 		} catch (error) {
@@ -112,9 +125,12 @@ export function initializeNotificationsWidget(contextPath, accountNavigation) {
 			/** @param {InAppNotification} notification */
 			(notification) => !notification.read,
 		).length;
+
 		count.hidden = unreadCount === 0;
 		count.textContent = unreadCount > 99 ? "99+" : String(unreadCount);
+
 		toggle.setAttribute("aria-label", `Notifications, ${unreadCount} unread`);
+
 		clearAll.disabled = notifications.length === 0;
 		list.replaceChildren();
 
@@ -123,6 +139,7 @@ export function initializeNotificationsWidget(contextPath, accountNavigation) {
 			empty.className = "notification-empty";
 			empty.textContent = "You have no notifications.";
 			list.append(empty);
+
 			return;
 		}
 
@@ -137,22 +154,30 @@ export function initializeNotificationsWidget(contextPath, accountNavigation) {
 		item.className = notification.read
 			? "notification-item is-read"
 			: "notification-item is-unread";
+
 		const heading = document.createElement("h3");
 		heading.textContent = "Your scheduled tasks";
+
 		const scheduled = document.createElement("p");
 		scheduled.className = "notification-scheduled";
 		scheduled.textContent =
-			`Scheduled for ${notification.scheduledDate} at ${notification.scheduledTime} (${notification.notificationTimezone})`;
+			`Scheduled for ${notification.scheduledDate} at ${notification.scheduledTime} `
+			+ `(${notification.notificationTimezone})`;
+
 		const taskList = document.createElement("ul");
 		taskList.className = "notification-tasks";
+
 		for (const task of notification.tasks) {
 			const taskItem = document.createElement("li");
 			taskItem.textContent = task.taskTitle;
+
 			if (task.taskDateDue) {
 				taskItem.append(document.createTextNode(` · Due ${task.taskDateDue.replace("T", " ")}`));
 			}
+
 			taskList.append(taskItem);
 		}
+
 		item.append(heading, scheduled, taskList);
 
 		if (notification.additionalTaskCount > 0) {
@@ -166,22 +191,27 @@ export function initializeNotificationsWidget(contextPath, accountNavigation) {
 
 		const actions = document.createElement("div");
 		actions.className = "notification-actions";
+
 		if (!notification.read) {
 			const markRead = document.createElement("button");
 			markRead.type = "button";
 			markRead.textContent = "Mark as read";
+
 			markRead.addEventListener("click", async () => {
 				markRead.disabled = true;
+
 				try {
 					await request(`${endpoint}/read?id=${notification.notificationId}`, {
 						method: "PUT",
 					});
+
 					await refresh(false);
 				} catch (error) {
 					markRead.disabled = false;
 					setError(error);
 				}
 			});
+
 			actions.append(markRead);
 		} else {
 			const readLabel = document.createElement("span");
@@ -194,20 +224,25 @@ export function initializeNotificationsWidget(contextPath, accountNavigation) {
 		clear.type = "button";
 		clear.className = "notification-clear";
 		clear.textContent = "Clear";
+
 		clear.addEventListener("click", async () => {
 			clear.disabled = true;
+
 			try {
 				await request(`${endpoint}?id=${notification.notificationId}`, {
 					method: "DELETE",
 				});
+
 				await refresh(false);
 			} catch (error) {
 				clear.disabled = false;
 				setError(error);
 			}
 		});
+
 		actions.append(clear);
 		item.append(actions);
+
 		return item;
 	};
 
@@ -215,6 +250,7 @@ export function initializeNotificationsWidget(contextPath, accountNavigation) {
 		const isOpen = !panel.hidden;
 		panel.hidden = isOpen;
 		toggle.setAttribute("aria-expanded", String(!isOpen));
+
 		if (!isOpen) {
 			void refresh(true);
 		}
@@ -224,7 +260,9 @@ export function initializeNotificationsWidget(contextPath, accountNavigation) {
 		if (!window.confirm("Permanently clear all notifications?")) {
 			return;
 		}
+
 		clearAll.disabled = true;
+
 		try {
 			await request(endpoint, { method: "DELETE" });
 			await refresh(false);
@@ -240,6 +278,7 @@ export function initializeNotificationsWidget(contextPath, accountNavigation) {
 			toggle.setAttribute("aria-expanded", "false");
 		}
 	});
+
 	document.addEventListener("keydown", (event) => {
 		if (event.key === "Escape") {
 			panel.hidden = true;
@@ -258,7 +297,9 @@ function isNotification(value) {
 	if (typeof value !== "object" || value === null) {
 		return false;
 	}
+
 	const notification = /** @type {Record<string, unknown>} */ (value);
+
 	return typeof notification.notificationId === "number"
 		&& typeof notification.scheduledDate === "string"
 		&& typeof notification.scheduledTime === "string"

@@ -28,8 +28,7 @@ export class EntityRenderer {
 		this.statusOutput = statusOutput;
 		this.results = results;
 		this.canManage = false;
-		/** @type {number | null} */
-		this.currentUserId = null;
+		/** @type {number | null} */ this.currentUserId = null;
 		this.onEdit = onEdit;
 		this.onDelete = onDelete;
 	}
@@ -84,8 +83,8 @@ export class EntityRenderer {
 
 		if (this.entity === "schedules") {
 			const schedule = /** @type {ScheduleRecord} */ (record);
-			const { firstName, lastName, userName, email, role } =
-				schedule.user;
+			const { firstName, lastName, userName, email, role } = schedule.user;
+
 			this.results.append(
 				this.createScheduleDetailCard(
 					`${firstName} ${lastName} (@${userName})`,
@@ -170,6 +169,7 @@ export class EntityRenderer {
 		if (this.canManage) {
 			group.append(this.createActions(schedule));
 		}
+
 		group.append(cards);
 		return group;
 	}
@@ -198,6 +198,7 @@ export class EntityRenderer {
 		if (this.canManage && this.entity !== "schedules" && this.canManageRecord(record)) {
 			article.append(this.createActions(record));
 		}
+
 		return article;
 	}
 
@@ -217,16 +218,19 @@ export class EntityRenderer {
 	createActions(record) {
 		const actions = document.createElement("div");
 		actions.className = "record-actions";
+
 		const edit = document.createElement("button");
 		edit.type = "button";
 		edit.textContent = "Edit";
 		edit.addEventListener("click", () => this.onEdit(record));
+
 		const remove = document.createElement("button");
 		remove.type = "button";
 		remove.className = "danger-button";
 		remove.textContent = "Delete";
 		remove.addEventListener("click", () => this.onDelete(record));
 		actions.append(edit, remove);
+
 		return actions;
 	}
 
@@ -286,9 +290,11 @@ export class EntityRenderer {
 		} else {
 			params.set("id", String(/** @type {UserRecord} */ (record).userId));
 		}
+
 		if (this.scope === "all") {
 			params.set("scope", "all");
 		}
+
 		return `${this.detailBase}detail.html?${params}`;
 	}
 

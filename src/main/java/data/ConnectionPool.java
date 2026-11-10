@@ -1,7 +1,10 @@
 package data;
 
-import java.sql.*;
 import javax.sql.DataSource;
+
+import java.sql.Connection;
+import java.sql.SQLException;
+
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
 
@@ -19,6 +22,7 @@ public class ConnectionPool {
         if (pool == null) {
             pool = new ConnectionPool();
         }
+
         return pool;
     }
 

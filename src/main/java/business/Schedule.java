@@ -18,9 +18,15 @@ public class Schedule implements Serializable {
     }
 
     public Schedule(String notificationSettings, Map<Integer, Task> tasks, User user) {
-        this(notificationSettings,
-                notificationSettings != null && !"NONE".equalsIgnoreCase(notificationSettings),
-                defaultNotificationDays(notificationSettings), "09:00", "UTC", tasks, user);
+        this(
+            notificationSettings,
+            notificationSettings != null && !"NONE".equalsIgnoreCase(notificationSettings),
+            defaultNotificationDays(notificationSettings),
+            "09:00",
+            "UTC",
+            tasks,
+            user
+        );
     }
 
     public Schedule(String notificationSettings, boolean notificationsEnabled, List<String> notificationDays,
@@ -38,6 +44,7 @@ public class Schedule implements Serializable {
         if ("WEEKLY".equalsIgnoreCase(settings)) {
             return List.of("MONDAY");
         }
+
         return List.of("MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY");
     }
 

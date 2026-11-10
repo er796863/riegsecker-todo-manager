@@ -1,12 +1,9 @@
 package controllers;
 
 import business.InAppNotification;
-import business.NotificationService;
 import business.User;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import data.TodoDB;
-
 import javax.naming.NamingException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -18,22 +15,33 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import static business.NotificationService.processStartup;
+import static controllers.AccountApi.getSessionUser;
+import static data.TodoDB.clearNotifications;
+import static data.TodoDB.deleteNotification;
+import static data.TodoDB.markNotificationRead;
+import static data.TodoDB.selectNotifications;
+
 public class NotificationsApi extends HttpServlet {
     private static final Gson GSON = new GsonBuilder().serializeNulls().create();
 
     @Override
     protected void doGet(HttpServletRequest request, HttpServletResponse response) {
         setNoStore(response);
+
         User user = requireUser(request, response);
+
         if (user == null) {
             return;
         }
+
         if (!"/".equals(path(request))) {
             sendError(response, HttpServletResponse.SC_NOT_FOUND, "Unknown notification resource");
             return;
         }
+
         try {
-            List<InAppNotification> notifications = TodoDB.selectNotifications(user.getUserId());
+            List<InAppNotification> notifications = selectNotifications(user.getUserId());
             sendJson(response, notifications);
         } catch (NamingException | SQLException exception) {
             handleDatabaseError(response, exception);
@@ -43,16 +51,20 @@ public class NotificationsApi extends HttpServlet {
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) {
         setNoStore(response);
+
         User user = requireUser(request, response);
+
         if (user == null) {
             return;
         }
+
         if (!"/check".equals(path(request))) {
             sendError(response, HttpServletResponse.SC_NOT_FOUND, "Unknown notification resource");
             return;
         }
+
         try {
-            boolean generated = NotificationService.processStartup(user.getUserId(), Instant.now());
+            boolean generated = processStartup(user.getUserId(), Instant.now());
             sendJson(response, Map.of("generated", generated));
         } catch (NamingException | SQLException exception) {
             handleDatabaseError(response, exception);
@@ -66,23 +78,30 @@ public class NotificationsApi extends HttpServlet {
     @Override
     protected void doPut(HttpServletRequest request, HttpServletResponse response) {
         setNoStore(response);
+
         User user = requireUser(request, response);
+
         if (user == null) {
             return;
         }
+
         if (!"/read".equals(path(request))) {
             sendError(response, HttpServletResponse.SC_NOT_FOUND, "Unknown notification resource");
             return;
         }
+
         Integer notificationId = parseId(request, response);
+
         if (notificationId == null) {
             return;
         }
+
         try {
-            if (!TodoDB.markNotificationRead(notificationId, user.getUserId())) {
+            if (!markNotificationRead(notificationId, user.getUserId())) {
                 sendError(response, HttpServletResponse.SC_NOT_FOUND, "Notification not found");
                 return;
             }
+
             sendJson(response, Map.of("read", true));
         } catch (NamingException | SQLException exception) {
             handleDatabaseError(response, exception);
@@ -92,29 +111,38 @@ public class NotificationsApi extends HttpServlet {
     @Override
     protected void doDelete(HttpServletRequest request, HttpServletResponse response) {
         setNoStore(response);
+
         User user = requireUser(request, response);
+
         if (user == null) {
             return;
         }
+
         if (!"/".equals(path(request))) {
             sendError(response, HttpServletResponse.SC_NOT_FOUND, "Unknown notification resource");
             return;
         }
+
         String id = request.getParameter("id");
+
         try {
             if (id == null) {
-                int deletedCount = TodoDB.clearNotifications(user.getUserId());
+                int deletedCount = clearNotifications(user.getUserId());
                 sendJson(response, Map.of("deletedCount", deletedCount));
                 return;
             }
+
             Integer notificationId = parseId(id, response);
+
             if (notificationId == null) {
                 return;
             }
-            if (!TodoDB.deleteNotification(notificationId, user.getUserId())) {
+
+            if (!deleteNotification(notificationId, user.getUserId())) {
                 sendError(response, HttpServletResponse.SC_NOT_FOUND, "Notification not found");
                 return;
             }
+
             sendJson(response, Map.of("deleted", true));
         } catch (NamingException | SQLException exception) {
             handleDatabaseError(response, exception);
@@ -122,10 +150,11 @@ public class NotificationsApi extends HttpServlet {
     }
 
     private User requireUser(HttpServletRequest request, HttpServletResponse response) {
-        User user = AccountApi.getSessionUser(request);
+        User user = getSessionUser(request);
         if (user == null) {
             sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Sign in to view notifications");
         }
+
         return user;
     }
 
@@ -143,12 +172,14 @@ public class NotificationsApi extends HttpServlet {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, "A notification ID is required");
             return null;
         }
+
         try {
             int id = Integer.parseInt(value);
             if (id <= 0) {
                 sendError(response, HttpServletResponse.SC_BAD_REQUEST, "IDs must be positive integers");
                 return null;
             }
+
             return id;
         } catch (NumberFormatException exception) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, "IDs must be integers");

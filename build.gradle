@@ -37,7 +37,9 @@ def requireTomcatHome = {
     def home = file(tomcatHome.get())
     def launcher = file("${home}\\bin\\catalina.bat")
     if (!launcher.isFile()) {
-        throw new GradleException("Tomcat was not found at ${home}. Set CATALINA_HOME to the Tomcat installation directory.")
+        throw new GradleException(
+                "Tomcat was not found at ${home}. "
+                        + "Set CATALINA_HOME to the Tomcat installation directory.")
     }
     home
 }

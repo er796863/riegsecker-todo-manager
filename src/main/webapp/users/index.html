@@ -6,7 +6,6 @@
     <link rel="stylesheet" href="../shared/entities.css" />
     <title>Users</title>
   </head>
-
   <body data-entity="users" data-mode="list" data-label="Users">
     <header data-global-header></header>
 
@@ -17,11 +16,27 @@
 
     <main>
       <h1>My profile</h1>
-
-      <output id="status">Loading users...</output>
-      <section id="results" aria-label="User records"></section>
+      <output id="account-status" aria-live="polite">Loading profile...</output>
+      <form id="profile-form" hidden>
+        <label for="profile-username">Username</label>
+        <input id="profile-username" name="username" autocomplete="username" required minlength="3" maxlength="50"
+          pattern="[A-Za-z0-9_.-]{3,50}"
+          title="Use 3-50 letters, numbers, dots, underscores, or hyphens" />
+        <label for="profile-first-name">First name</label>
+        <input id="profile-first-name" name="firstName" autocomplete="given-name" required maxlength="50" />
+        <label for="profile-last-name">Last name</label>
+        <input id="profile-last-name" name="lastName" autocomplete="family-name" required maxlength="50" />
+        <label for="profile-email">Email</label>
+        <input id="profile-email" name="email" type="email" autocomplete="email" required maxlength="254" />
+        <label for="profile-current-password">Current password (required to change password)</label>
+        <input id="profile-current-password" name="currentPassword" type="password"
+          autocomplete="current-password" maxlength="72" />
+        <label for="profile-new-password">New password (leave blank to keep current)</label>
+        <input id="profile-new-password" name="newPassword" type="password"
+          autocomplete="new-password" minlength="12" maxlength="72" />
+        <button id="profile-submit" type="submit">Save changes</button>
+      </form>
     </main>
-
-    <script type="module" src="../shared/entities.js"></script>
+    <script type="module" src="../shared/profile.js"></script>
   </body>
 </html>

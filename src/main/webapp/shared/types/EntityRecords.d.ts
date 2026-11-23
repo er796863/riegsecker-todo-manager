@@ -18,6 +18,7 @@ export interface UserRecord {
 }
 
 export interface ScheduleRecord {
+	scheduleName: string;
 	notificationSettings: string;
 	notificationsEnabled: boolean;
 	notificationDays: string[];

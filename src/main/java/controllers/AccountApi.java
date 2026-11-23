@@ -1,6 +1,7 @@
 package controllers;
 
 import business.AccountCredentials;
+import business.PasswordHasher;
 import business.User;
 import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
@@ -17,6 +18,7 @@ import java.util.Locale;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.regex.Pattern;
+import data.TodoDB;
 
 import static business.PasswordHasher.hash;
 import static business.PasswordHasher.needsUpgrade;
@@ -42,6 +44,15 @@ public class AccountApi extends HttpServlet {
         private String firstName;
         private String lastName;
         private String email;
+    }
+
+    private static final class ProfileRequest {
+        private String username;
+        private String firstName;
+        private String lastName;
+        private String email;
+        private String currentPassword;
+        private String newPassword;
     }
 
     @Override
@@ -76,6 +87,7 @@ public class AccountApi extends HttpServlet {
             switch (path(request)) {
                 case "login" -> login(request, response);
                 case "register" -> register(request, response);
+                case "profile" -> updateProfile(request, response);
                 case "logout" -> logout(request, response);
                 default -> sendError(response, HttpServletResponse.SC_NOT_FOUND, "Unknown account resource");
             }
@@ -86,8 +98,7 @@ public class AccountApi extends HttpServlet {
 
     private void login(HttpServletRequest request, HttpServletResponse response)
             throws NamingException, SQLException {
-        AccountRequest body = readBody(request, response);
-
+        AccountRequest body = readBody(request, response, AccountRequest.class);
         if (body == null) {
             return;
         }
@@ -123,8 +134,7 @@ public class AccountApi extends HttpServlet {
 
     private void register(HttpServletRequest request, HttpServletResponse response)
             throws NamingException, SQLException {
-        AccountRequest body = readBody(request, response);
-
+        AccountRequest body = readBody(request, response, AccountRequest.class);
         if (body == null) {
             return;
         }
@@ -149,6 +159,78 @@ public class AccountApi extends HttpServlet {
         sendJson(response, Map.of("user", userPayload(user)));
     }
 
+    private void updateProfile(HttpServletRequest request, HttpServletResponse response)
+            throws NamingException, SQLException {
+        HttpSession session = request.getSession(false);
+        Object value = session == null ? null : session.getAttribute(SESSION_USER);
+        if (!(value instanceof User user)) {
+            sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Sign in to edit your profile");
+            return;
+        }
+
+        ProfileRequest body = readBody(request, response, ProfileRequest.class);
+        if (body == null) {
+            return;
+        }
+        String username = body.username == null ? "" : body.username.trim();
+        String firstName = body.firstName == null ? "" : body.firstName.trim();
+        String lastName = body.lastName == null ? "" : body.lastName.trim();
+        String email = body.email == null ? "" : body.email.trim().toLowerCase(Locale.ROOT);
+        if (!USERNAME.matcher(username).matches()) {
+            sendError(response, HttpServletResponse.SC_BAD_REQUEST,
+                    "Username must be 3-50 characters using letters, numbers, dots, underscores, or hyphens");
+            return;
+        }
+        String validationError = validateProfile(firstName, lastName, email);
+        if (validationError != null) {
+            sendError(response, HttpServletResponse.SC_BAD_REQUEST, validationError);
+            return;
+        }
+
+        String passwordHash = null;
+        if (body.newPassword != null && !body.newPassword.isEmpty()) {
+            String passwordError = validatePassword(body.newPassword);
+            if (passwordError != null) {
+                sendError(response, HttpServletResponse.SC_BAD_REQUEST, passwordError);
+                return;
+            }
+            if (body.currentPassword == null || body.currentPassword.isEmpty()
+                    || body.currentPassword.getBytes(StandardCharsets.UTF_8).length > 72) {
+                sendError(response, HttpServletResponse.SC_BAD_REQUEST,
+                        "Enter your current password to change it");
+                return;
+            }
+
+            AccountCredentials account = TodoDB.findAccountByUserId(user.getUserId());
+            if (account == null) {
+                sendError(response, HttpServletResponse.SC_NOT_FOUND, "Account no longer exists");
+                return;
+            }
+            if (!PasswordHasher.verify(body.currentPassword, account.passwordHash())) {
+                sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Current password is incorrect");
+                return;
+            }
+            if (PasswordHasher.verify(body.newPassword, account.passwordHash())) {
+                sendError(response, HttpServletResponse.SC_BAD_REQUEST,
+                        "New password must be different from your current password");
+                return;
+            }
+            passwordHash = PasswordHasher.hash(body.newPassword);
+        }
+
+        if (!TodoDB.updateUserProfile(user.getUserId(), username, firstName, lastName, email, passwordHash)) {
+            sendError(response, HttpServletResponse.SC_NOT_FOUND, "Account no longer exists");
+            return;
+        }
+
+        user.setUserName(username);
+        user.setFirstName(firstName);
+        user.setLastName(lastName);
+        user.setEmail(email);
+        session.setAttribute(SESSION_USER, user);
+        sendJson(response, Map.of("user", userPayload(user)));
+    }
+
     private void logout(HttpServletRequest request, HttpServletResponse response) {
         HttpSession session = request.getSession(false);
         if (session != null) {
@@ -160,11 +242,17 @@ public class AccountApi extends HttpServlet {
 
     private static String validateRegistration(String username, String firstName, String lastName,
             String email, String password) {
-        String profileError = validateProfile(username, firstName, lastName, email);
+        if (!USERNAME.matcher(username).matches()) {
+            return "Username must be 3-50 characters using letters, numbers, dots, underscores, or hyphens";
+        }
+        String profileError = validateProfile(firstName, lastName, email);
         if (profileError != null) {
             return profileError;
         }
+        return validatePassword(password);
+    }
 
+    private static String validatePassword(String password) {
         if (password == null || password.length() < 12
                 || password.getBytes(StandardCharsets.UTF_8).length > 72) {
             return "Password must be at least 12 characters and no more than 72 UTF-8 bytes";
@@ -190,7 +278,18 @@ public class AccountApi extends HttpServlet {
         return null;
     }
 
-    private AccountRequest readBody(HttpServletRequest request, HttpServletResponse response) {
+    private static String validateProfile(String firstName, String lastName, String email) {
+        if (firstName.isBlank() || firstName.length() > 50
+                || lastName.isBlank() || lastName.length() > 50) {
+            return "First and last names are required and must be no longer than 50 characters";
+        }
+        if (email.length() > 254 || !EMAIL.matcher(email).matches()) {
+            return "Enter a valid email address";
+        }
+        return null;
+    }
+
+    private <T> T readBody(HttpServletRequest request, HttpServletResponse response, Class<T> bodyType) {
         if (request.getContentLengthLong() > 8192) {
             sendError(response, HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE, "Account request is too large");
             return null;
@@ -213,8 +312,7 @@ public class AccountApi extends HttpServlet {
                     json.append(buffer, 0, count);
                 }
             }
-
-            AccountRequest body = GSON.fromJson(json.toString(), AccountRequest.class);
+            T body = GSON.fromJson(json.toString(), bodyType);
             if (body == null) {
                 sendError(response, HttpServletResponse.SC_BAD_REQUEST, "A JSON request body is required");
             }

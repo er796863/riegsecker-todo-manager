@@ -6,7 +6,6 @@
     <link rel="stylesheet" href="../shared/entities.css" />
     <title>Schedules</title>
   </head>
-
   <body data-entity="schedules" data-mode="list" data-label="Schedules">
     <header data-global-header></header>
 
@@ -17,11 +16,27 @@
 
     <main>
       <h1>My schedule</h1>
-
-      <output id="status">Loading schedules...</output>
-      <section id="results" aria-label="Schedule records"></section>
+      <output id="status" aria-live="polite">Loading schedule...</output>
+      <section id="schedule-summary" aria-labelledby="schedule-summary-heading" hidden>
+        <h2 id="schedule-summary-heading">Your schedule</h2>
+        <ul id="schedule-summary-list"></ul>
+      </section>
+      <form id="schedule-form" hidden>
+        <label for="schedule-name">Schedule name</label>
+        <input id="schedule-name" name="scheduleName" required maxlength="100" />
+        <label for="notification-settings">Notification settings</label>
+        <select id="notification-settings" name="notificationSettings">
+          <option value="NONE">None</option>
+          <option value="DAILY">Daily</option>
+          <option value="WEEKLY">Weekly</option>
+        </select>
+        <fieldset id="schedule-task-options">
+          <legend>Tasks to include in your schedule</legend>
+          <div id="schedule-tasks">Loading available tasks...</div>
+        </fieldset>
+        <button id="schedule-submit" type="submit">Save schedule</button>
+      </form>
     </main>
-
-    <script type="module" src="../shared/entities.js"></script>
+    <script type="module" src="./manage.js"></script>
   </body>
 </html>

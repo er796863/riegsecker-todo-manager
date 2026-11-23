@@ -6,7 +6,6 @@
     <link rel="stylesheet" href="../shared/entities.css" />
     <title>Tasks</title>
   </head>
-
   <body data-entity="tasks" data-mode="list" data-label="Tasks">
     <header data-global-header></header>
 
@@ -16,12 +15,23 @@
     </nav>
 
     <main>
-      <h1>Tasks</h1>
-
-      <output id="status">Loading tasks...</output>
-      <section id="results" aria-label="Task records"></section>
+      <h1>My tasks</h1>
+      <output id="status" aria-live="polite">Loading tasks...</output>
+      <form id="task-form" hidden>
+        <h2 id="task-form-heading">Create task</h2>
+        <label for="task-title">Title</label>
+        <input id="task-title" name="taskTitle" required maxlength="150" />
+        <label for="task-description">Description</label>
+        <textarea id="task-description" name="taskDescription" maxlength="1000"></textarea>
+        <label for="task-due-date">Due date</label>
+        <input id="task-due-date" name="taskDateDue" type="datetime-local" />
+        <div class="form-actions">
+          <button id="task-submit" type="submit">Create task</button>
+          <button id="task-cancel" type="button" hidden>Cancel edit</button>
+        </div>
+      </form>
+      <section id="task-results" aria-label="Your tasks"></section>
     </main>
-
-    <script type="module" src="../shared/entities.js"></script>
+    <script type="module" src="./manage.js"></script>
   </body>
 </html>

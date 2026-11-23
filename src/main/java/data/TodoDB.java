@@ -20,13 +20,27 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.ToIntFunction;
 import javax.naming.NamingException;
 
 public class TodoDB {
+    public enum TaskDeleteResult {
+        DELETED,
+        NOT_FOUND,
+        ASSIGNED_TO_OTHER_USERS
+    }
+
+    public enum ScheduleUpdateResult {
+        UPDATED,
+        NOT_FOUND,
+        UNKNOWN_TASK
+    }
+
     // language=MySQL
     private static final String BASE_TASKS_QUERY = "SELECT task_id, task_title, task_description, "
             + "date_created, date_due FROM tasks";
@@ -66,7 +80,8 @@ public class TodoDB {
             + "LIKE ? ORDER BY user_id";
 
     // language=MySQL
-    private static final String SCHEDULES_BASE_QUERY = "SELECT s.notification_setting AS notificationSettings, "
+    private static final String SCHEDULES_BASE_QUERY = "SELECT s.schedule_name AS scheduleName, "
+            + "s.notification_setting AS notificationSettings, "
             + "s.notification_enabled AS notificationsEnabled, s.notification_days AS notificationDaysMask, "
             + "TIME_FORMAT(s.notification_time, '%H:%i') AS notificationTime, "
             + "s.notification_timezone AS notificationTimezone, "
@@ -76,7 +91,7 @@ public class TodoDB {
             + "t.task_id, t.task_title, t.task_description, t.date_created, t.date_due "
             + "FROM schedules s JOIN users u ON s.user_id = u.user_id "
             + "LEFT JOIN schedule_tasks st ON s.schedule_id = st.schedule_id "
-            + "LEFT JOIN tasks t ON st.task_id = t.task_id AND t.user_id = u.user_id";
+            + "LEFT JOIN tasks t ON st.task_id = t.task_id";
 
     // language=MySQL
     private static final String SELECT_SCHEDULES_QUERY = SCHEDULES_BASE_QUERY
@@ -88,12 +103,15 @@ public class TodoDB {
 
     // language=MySQL
     private static final String SEARCH_SCHEDULES_QUERY = SCHEDULES_BASE_QUERY
-            + " WHERE (? IS NULL OR s.user_id = ?) AND CONCAT_WS(' ', CAST(s.user_id AS CHAR), s.notification_setting, "
+            + " WHERE (? IS NULL OR s.user_id = ?) AND CONCAT_WS(' ', CAST(s.user_id AS CHAR), s.schedule_name, "
+            + "s.notification_setting, "
             + "u.username, u.first_name, u.last_name, "
             + "t.task_title, t.task_description) LIKE ? ORDER BY u.user_id, t.task_id";
 
     private static final String ACCOUNT_QUERY = "SELECT user_id, username, first_name, last_name, email, "
             + USER_ROLE_QUERY + ", password_hash FROM users WHERE username = ?";
+    private static final String ACCOUNT_BY_ID_QUERY = "SELECT user_id, username, first_name, last_name, email, "
+            + USER_ROLE_QUERY + ", password_hash FROM users WHERE user_id = ?";
 
     /**
      * Prevents instantiation of this database utility class.
@@ -311,6 +329,115 @@ public class TodoDB {
         return selectEntities(ownerId, SELECT_TASKS_QUERY, TodoDB::buildTask, Task::getTaskId);
     }
 
+    public static Integer createTask(Integer ownerId, String title, String description, LocalDateTime dueDate)
+            throws NamingException, SQLException {
+        ConnectionPool pool = ConnectionPool.getInstance();
+        try (Connection connection = pool.getConnection();
+                PreparedStatement ps = connection.prepareStatement(
+                        "INSERT INTO tasks (user_id, task_title, task_description, date_due) VALUES (?, ?, ?, ?)",
+                        java.sql.Statement.RETURN_GENERATED_KEYS)) {
+            ps.setInt(1, ownerId);
+            ps.setString(2, title);
+            ps.setString(3, description);
+            setTimestamp(ps, 4, dueDate);
+            ps.executeUpdate();
+            try (ResultSet keys = ps.getGeneratedKeys()) {
+                if (!keys.next()) {
+                    throw new SQLException("Database did not return a new task ID.");
+                }
+                return keys.getInt(1);
+            }
+        }
+    }
+
+    public static boolean updateTask(Integer taskId, Integer ownerId, String title, String description,
+            LocalDateTime dueDate) throws NamingException, SQLException {
+        ConnectionPool pool = ConnectionPool.getInstance();
+        try (Connection connection = pool.getConnection();
+                PreparedStatement update = connection.prepareStatement(
+                        "UPDATE tasks SET task_title = ?, task_description = ?, date_due = ? "
+                                + "WHERE task_id = ? AND user_id = ?")) {
+            update.setString(1, title);
+            update.setString(2, description);
+            setTimestamp(update, 3, dueDate);
+            update.setInt(4, taskId);
+            update.setInt(5, ownerId);
+            if (update.executeUpdate() > 0) {
+                return true;
+            }
+            try (PreparedStatement exists = connection.prepareStatement(
+                    "SELECT 1 FROM tasks WHERE task_id = ? AND user_id = ?")) {
+                exists.setInt(1, taskId);
+                exists.setInt(2, ownerId);
+                try (ResultSet rs = exists.executeQuery()) {
+                    return rs.next();
+                }
+            }
+        }
+    }
+
+    public static TaskDeleteResult deleteTask(Integer taskId, Integer ownerId)
+            throws NamingException, SQLException {
+        ConnectionPool pool = ConnectionPool.getInstance();
+        try (Connection connection = pool.getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                try (PreparedStatement ownedTask = connection.prepareStatement(
+                        "SELECT task_id FROM tasks WHERE task_id = ? AND (? IS NULL OR user_id = ?) FOR UPDATE")) {
+                    ownedTask.setInt(1, taskId);
+                    setNullableInteger(ownedTask, 2, ownerId);
+                    setNullableInteger(ownedTask, 3, ownerId);
+                    try (ResultSet rs = ownedTask.executeQuery()) {
+                        if (!rs.next()) {
+                            connection.rollback();
+                            return TaskDeleteResult.NOT_FOUND;
+                        }
+                    }
+                }
+
+                if (ownerId != null) {
+                    try (PreparedStatement externalSchedule = connection.prepareStatement(
+                        "SELECT 1 FROM schedule_tasks st "
+                                + "JOIN schedules s ON s.schedule_id = st.schedule_id "
+                                + "WHERE st.task_id = ? AND s.user_id <> ? LIMIT 1")) {
+                        externalSchedule.setInt(1, taskId);
+                        externalSchedule.setInt(2, ownerId);
+                        try (ResultSet rs = externalSchedule.executeQuery()) {
+                            if (rs.next()) {
+                                connection.rollback();
+                                return TaskDeleteResult.ASSIGNED_TO_OTHER_USERS;
+                            }
+                        }
+                    }
+                }
+
+                try (PreparedStatement delete = connection.prepareStatement(
+                        "DELETE FROM tasks WHERE task_id = ? AND (? IS NULL OR user_id = ?)")) {
+                    delete.setInt(1, taskId);
+                    setNullableInteger(delete, 2, ownerId);
+                    setNullableInteger(delete, 3, ownerId);
+                    delete.executeUpdate();
+                }
+                connection.commit();
+                return TaskDeleteResult.DELETED;
+            } catch (SQLException exception) {
+                connection.rollback();
+                throw exception;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+        }
+    }
+
+    private static void setTimestamp(PreparedStatement ps, int index, LocalDateTime value)
+            throws SQLException {
+        if (value == null) {
+            ps.setNull(index, Types.TIMESTAMP);
+        } else {
+            ps.setTimestamp(index, Timestamp.valueOf(value));
+        }
+    }
+
     /**
      * Searches for tasks, keyed by task ID.
      */
@@ -371,19 +498,6 @@ public class TodoDB {
             try (ResultSet rs = ps.executeQuery()) {
                 return rs.next();
             }
-        }
-    }
-
-    public static boolean deleteTask(Integer id, Integer ownerId) throws NamingException, SQLException {
-        String query = "DELETE FROM tasks WHERE task_id = ? AND (? IS NULL OR user_id = ?)";
-        ConnectionPool pool = ConnectionPool.getInstance();
-
-        try (Connection connection = pool.getConnection(); PreparedStatement ps = connection.prepareStatement(query)) {
-            ps.setInt(1, id);
-            setNullableInteger(ps, 2, ownerId);
-            setNullableInteger(ps, 3, ownerId);
-
-            return ps.executeUpdate() == 1;
         }
     }
 
@@ -629,10 +743,10 @@ public class TodoDB {
             try {
                 try (
                     PreparedStatement ps = connection.prepareStatement(
-                        "INSERT INTO schedules (user_id, notification_setting, notification_enabled, "
+                        "INSERT INTO schedules (user_id, schedule_name, notification_setting, notification_enabled, "
                         + "notification_days, notification_time, notification_timezone, "
                         + "notification_checked_at_utc) "
-                        + "VALUES (?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())"
+                        + "VALUES (?, 'My schedule', ?, ?, ?, ?, ?, UTC_TIMESTAMP())"
                     )
                 ) {
                     ps.setInt(1, userId);
@@ -668,24 +782,33 @@ public class TodoDB {
     public static boolean updateSchedule(Integer userId, Integer ownerId, String notificationSettings,
             boolean enabled, List<String> days, String time, String timezone, List<Integer> taskIds)
             throws NamingException, SQLException {
+        return updateSchedule(userId, ownerId, null, notificationSettings, enabled, days, time, timezone, taskIds);
+    }
+
+    public static boolean updateSchedule(Integer userId, Integer ownerId, String scheduleName,
+            String notificationSettings, boolean enabled, List<String> days, String time, String timezone,
+            List<Integer> taskIds)
+            throws NamingException, SQLException {
         ConnectionPool pool = ConnectionPool.getInstance();
         try (Connection connection = pool.getConnection()) {
             connection.setAutoCommit(false);
             try {
-                String update = "UPDATE schedules SET notification_setting = ?, notification_enabled = ?, "
+                String update = "UPDATE schedules SET schedule_name = COALESCE(?, schedule_name), "
+                        + "notification_setting = ?, notification_enabled = ?, "
                         + "notification_days = ?, notification_time = ?, notification_timezone = ?, "
                         + "notification_checked_at_utc = UTC_TIMESTAMP() "
                         + "WHERE user_id = ? AND (? IS NULL OR user_id = ?)";
 
                 try (PreparedStatement ps = connection.prepareStatement(update)) {
-                    ps.setString(1, notificationSettings);
-                    ps.setBoolean(2, enabled);
-                    ps.setInt(3, notificationDaysMask(days));
-                    ps.setTime(4, Time.valueOf(LocalTime.parse(time)));
-                    ps.setString(5, timezone);
-                    ps.setInt(6, userId);
-                    setNullableInteger(ps, 7, ownerId);
+                    ps.setString(1, scheduleName);
+                    ps.setString(2, notificationSettings);
+                    ps.setBoolean(3, enabled);
+                    ps.setInt(4, notificationDaysMask(days));
+                    ps.setTime(5, Time.valueOf(LocalTime.parse(time)));
+                    ps.setString(6, timezone);
+                    ps.setInt(7, userId);
                     setNullableInteger(ps, 8, ownerId);
+                    setNullableInteger(ps, 9, ownerId);
 
                     if (ps.executeUpdate() != 1) {
                         boolean exists;
@@ -695,7 +818,6 @@ public class TodoDB {
                             )
                         ) {
                             check.setInt(1, userId);
-
                             setNullableInteger(check, 2, ownerId);
                             setNullableInteger(check, 3, ownerId);
 
@@ -742,7 +864,7 @@ public class TodoDB {
             PreparedStatement ps = connection.prepareStatement(
                 "INSERT INTO schedule_tasks (schedule_id, task_id) "
                 + "SELECT s.schedule_id, t.task_id FROM schedules s "
-                + "JOIN tasks t ON t.user_id = s.user_id AND t.task_id = ? "
+                + "JOIN tasks t ON t.task_id = ? "
                 + "WHERE s.user_id = ?"
             )
         ) {
@@ -751,7 +873,7 @@ public class TodoDB {
                 ps.setInt(2, userId);
                 if (ps.executeUpdate() != 1) {
                     throw new IllegalArgumentException(
-                        "Every scheduled task must belong to the schedule's user"
+                        "Every scheduled task must exist"
                     );
                 }
             }
@@ -796,14 +918,6 @@ public class TodoDB {
         }
     }
 
-    private static void setTimestamp(PreparedStatement ps, int index, LocalDateTime value) throws SQLException {
-        if (value == null) {
-            ps.setNull(index, Types.TIMESTAMP);
-        } else {
-            ps.setTimestamp(index, Timestamp.valueOf(value));
-        }
-    }
-
     /**
      * Builds a schedule and its task map from the current result-set row.
      */
@@ -816,7 +930,6 @@ public class TodoDB {
             Task task = buildTask(rs);
             tasks.put(taskId, task);
         }
-
         String notificationSettings = rs.getString("notificationSettings");
         boolean notificationsEnabled = rs.getBoolean("notificationsEnabled");
         int dayMask = rs.getInt("notificationDaysMask");
@@ -831,7 +944,8 @@ public class TodoDB {
         String notificationTime = rs.getString("notificationTime");
         String notificationTimezone = rs.getString("notificationTimezone");
 
-        return new Schedule(notificationSettings, notificationsEnabled, notificationDays,
+        String scheduleName = rs.getString("scheduleName");
+        return new Schedule(scheduleName, notificationSettings, notificationsEnabled, notificationDays,
                 notificationTime, notificationTimezone, tasks, user);
     }
 
@@ -863,6 +977,97 @@ public class TodoDB {
     public static Schedule selectSchedule(Integer id, Integer ownerId) throws NamingException, SQLException {
         return selectEntity(id, ownerId, SELECT_SCHEDULE_QUERY, TodoDB::buildSchedule,
                 TodoDB::scheduleUserId, TodoDB::mergeScheduleTasks);
+    }
+
+    public static ScheduleUpdateResult updateSchedule(Integer userId, String scheduleName,
+            String notificationSettings, List<Integer> taskIds) throws NamingException, SQLException {
+        return updateSchedule(userId, userId, scheduleName, notificationSettings, taskIds);
+    }
+
+    public static ScheduleUpdateResult updateSchedule(Integer userId, Integer ownerId, String scheduleName,
+            String notificationSettings, List<Integer> taskIds) throws NamingException, SQLException {
+        if (userId == null) {
+            return ScheduleUpdateResult.NOT_FOUND;
+        }
+        ConnectionPool pool = ConnectionPool.getInstance();
+        try (Connection connection = pool.getConnection()) {
+            connection.setAutoCommit(false);
+            try {
+                Integer scheduleId = null;
+                try (PreparedStatement schedule = connection.prepareStatement(
+                        "SELECT schedule_id FROM schedules WHERE user_id = ? "
+                                + "AND (? IS NULL OR user_id = ?) FOR UPDATE")) {
+                    schedule.setInt(1, userId);
+                    setNullableInteger(schedule, 2, ownerId);
+                    setNullableInteger(schedule, 3, ownerId);
+                    try (ResultSet rs = schedule.executeQuery()) {
+                        if (rs.next()) {
+                            scheduleId = rs.getInt(1);
+                        }
+                    }
+                }
+                if (scheduleId == null) {
+                    connection.rollback();
+                    return ScheduleUpdateResult.NOT_FOUND;
+                }
+                if (!allTasksExist(connection, taskIds)) {
+                    connection.rollback();
+                    return ScheduleUpdateResult.UNKNOWN_TASK;
+                }
+
+                try (PreparedStatement update = connection.prepareStatement(
+                        "UPDATE schedules SET schedule_name = ?, notification_setting = ?, "
+                                + "notification_enabled = ?, notification_checked_at_utc = UTC_TIMESTAMP() "
+                                + "WHERE schedule_id = ? AND (? IS NULL OR user_id = ?)")) {
+                    update.setString(1, scheduleName);
+                    update.setString(2, notificationSettings);
+                    update.setBoolean(3, !"NONE".equals(notificationSettings));
+                    update.setInt(4, scheduleId);
+                    setNullableInteger(update, 5, ownerId);
+                    setNullableInteger(update, 6, ownerId);
+                    update.executeUpdate();
+                }
+                try (PreparedStatement delete = connection.prepareStatement(
+                        "DELETE FROM schedule_tasks WHERE schedule_id = ?")) {
+                    delete.setInt(1, scheduleId);
+                    delete.executeUpdate();
+                }
+                if (!taskIds.isEmpty()) {
+                    try (PreparedStatement insert = connection.prepareStatement(
+                            "INSERT INTO schedule_tasks (schedule_id, task_id) VALUES (?, ?)")) {
+                        for (Integer taskId : taskIds) {
+                            insert.setInt(1, scheduleId);
+                            insert.setInt(2, taskId);
+                            insert.addBatch();
+                        }
+                        insert.executeBatch();
+                    }
+                }
+                connection.commit();
+                return ScheduleUpdateResult.UPDATED;
+            } catch (SQLException exception) {
+                connection.rollback();
+                throw exception;
+            } finally {
+                connection.setAutoCommit(true);
+            }
+        }
+    }
+
+    private static boolean allTasksExist(Connection connection, List<Integer> taskIds) throws SQLException {
+        if (taskIds.isEmpty()) {
+            return true;
+        }
+        String placeholders = String.join(", ", Collections.nCopies(taskIds.size(), "?"));
+        try (PreparedStatement ps = connection.prepareStatement(
+                "SELECT COUNT(DISTINCT task_id) FROM tasks WHERE task_id IN (" + placeholders + ")")) {
+            for (int i = 0; i < taskIds.size(); i++) {
+                ps.setInt(i + 1, taskIds.get(i));
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                return rs.next() && rs.getInt(1) == taskIds.size();
+            }
+        }
     }
 
     /**
@@ -908,6 +1113,23 @@ public class TodoDB {
         }
     }
 
+    public static AccountCredentials findAccountByUserId(Integer userId) throws NamingException, SQLException {
+        if (userId == null) {
+            return null;
+        }
+        ConnectionPool pool = ConnectionPool.getInstance();
+        try (Connection connection = pool.getConnection();
+                PreparedStatement ps = connection.prepareStatement(ACCOUNT_BY_ID_QUERY)) {
+            ps.setInt(1, userId);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                return new AccountCredentials(buildUser(rs), rs.getString("password_hash"));
+            }
+        }
+    }
+
     public static void updatePasswordHash(String username, String passwordHash)
             throws NamingException, SQLException {
         ConnectionPool pool = ConnectionPool.getInstance();
@@ -920,6 +1142,37 @@ public class TodoDB {
             ps.setString(1, passwordHash);
             ps.setString(2, username);
             ps.executeUpdate();
+        }
+    }
+
+    public static boolean updateUserProfile(Integer userId, String username, String firstName, String lastName,
+            String email, String passwordHash)
+            throws NamingException, SQLException {
+        if (userId == null) {
+            return false;
+        }
+        ConnectionPool pool = ConnectionPool.getInstance();
+        try (Connection connection = pool.getConnection();
+                PreparedStatement update = connection.prepareStatement(
+                        "UPDATE users SET username = ?, first_name = ?, last_name = ?, email = ?, "
+                                + "password_hash = COALESCE(?, password_hash) WHERE user_id = ?")) {
+            update.setString(1, username);
+            update.setString(2, firstName);
+            update.setString(3, lastName);
+            update.setString(4, email);
+            update.setString(5, passwordHash);
+            update.setInt(6, userId);
+            if (update.executeUpdate() > 0) {
+                return true;
+            }
+
+            try (PreparedStatement exists = connection.prepareStatement(
+                    "SELECT 1 FROM users WHERE user_id = ?")) {
+                exists.setInt(1, userId);
+                try (ResultSet rs = exists.executeQuery()) {
+                    return rs.next();
+                }
+            }
         }
     }
 
@@ -938,7 +1191,7 @@ public class TodoDB {
                 + "t.task_id, t.task_title, DATE_FORMAT(t.date_due, '%Y-%m-%dT%H:%i:%s') AS task_date_due "
                 + "FROM schedules s "
                 + "LEFT JOIN schedule_tasks st ON st.schedule_id = s.schedule_id "
-                + "LEFT JOIN tasks t ON t.task_id = st.task_id AND t.user_id = s.user_id "
+                + "LEFT JOIN tasks t ON t.task_id = st.task_id "
                 + "WHERE s.user_id = ? "
                 + "ORDER BY (t.date_due IS NULL), t.date_due, t.task_id LIMIT 10";
 

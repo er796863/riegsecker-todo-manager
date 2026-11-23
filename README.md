@@ -57,6 +57,13 @@ successful app login. Each account receives its own schedule. Regular accounts
 can view only their own task, user, and schedule records; an account with the
 `ADMIN` role can view all records across those APIs.
 
+Signed-in users can update their own username, first name, last name, and email
+from **My profile**. A username must be unique. Users can also change their
+password by entering their current password and a new password; leaving the new
+password blank keeps the current password. A new password must meet the account
+password requirements and cannot match the current password. The profile API
+uses the current session to identify the account being changed.
+
 ### Local administrator account
 
 The development database includes this administrator account:
@@ -113,6 +120,22 @@ To use an existing Tomcat 9 installation instead, set `CATALINA_HOME` before
 running Gradle. Its `conf/server.xml` will be backed up once as
 `server.xml.riegsecker-backup` before the project configures it.
 
+### Gradle Daemons
+Gradle keeps its daemon available for reuse while you work and stops it
+automatically after 10 minutes of inactivity. The project pins the daemon to
+JDK 17 in `gradle/gradle-daemon-jvm.properties`, so command-line and IDE builds
+can share a daemon even if their launcher JDKs differ. Daemons with different
+JVM options still cannot be reused. To inspect or stop Gradle daemons sooner,
+run these commands from the repository root:
+
+```powershell
+.\gradlew.bat --status
+.\gradlew.bat --stop
+```
+
+`--stop` stops daemons for this Gradle version and Gradle user home, including
+daemons used by other projects. The next Gradle task will start a daemon again.
+
 ### Start Application
 After initializing/updating the database above, builds the WAR, prepares
 Tomcat, stops any running instance to prevent port conflicts, deploys the
@@ -129,17 +152,31 @@ does not change the current login flow.
 
 ## Browsing Records
 
-The home page links to list, detail, and search pages for tasks, users, and schedules. Task and schedule pages include create, edit, and delete controls for the signed-in user's records. Administrators can use the **All tasks**, **All users**, and **All schedules** pages to manage records across accounts. User management is administrator-only; creating a user requires a password, while leaving the password blank when editing preserves the existing password. The administrator currently signed in cannot edit or delete their own account, and the last administrator cannot be demoted or deleted.
-
-The read API uses GET requests:
+The home page links to task, user, and schedule pages. Users can create, edit,
+and delete their own tasks; they can update their schedule's notification
+setting and select tasks created by any user. A task cannot be deleted while
+assigned to another user's schedule. The user directory remains read-only.
+Administrator all-record views can manage records across accounts. The entity
+browsing API provides GET requests. Task and schedule pages include create, edit, and delete controls
+for the signed-in user's records. Administrators can use the **All tasks**,
+**All users**, and **All schedules** pages to manage records across accounts.
+User management is administrator-only; creating a user requires a password,
+while leaving the password blank when editing preserves the existing password.
+The administrator currently signed in cannot edit or delete their own account,
+and the last administrator cannot be demoted or deleted.
 
 - `/api/business/tasks` — list tasks; `?id=<taskId>` retrieves one task and `?search=<term>` searches IDs, titles, and descriptions.
 - `/api/business/users` — list users; `?id=<userId>` retrieves one user and `?search=<term>` searches IDs, usernames, names, email addresses, and roles.
-- `/api/business/schedules` — list schedules; `?taskId=<taskId>&userId=<userId>` retrieves one schedule and `?search=<term>` searches task IDs, user IDs, and notification settings.
+- `/api/business/schedules` — list schedules; `?id=<userId>` retrieves one schedule and `?search=<term>` searches schedule names, task IDs, user IDs, and notification settings.
 
 User responses intentionally omit password hashes.
 
-The same entity endpoints accept JSON `POST` requests to create and `PUT ?id=<id>` requests to update, plus `DELETE ?id=<id>` requests to delete. Ownership is enforced for regular accounts. Administrators may pass `scope=all` to manage records across accounts. Deleting a task removes its schedule assignment; deleting a schedule leaves its tasks intact. Deleting a user also removes their tasks and schedule.
+The same entity endpoints accept JSON `POST` requests to create and `PUT ?id=<id>`
+requests to update, plus `DELETE ?id=<id>` requests to delete. Ownership is
+enforced for regular accounts. Administrators may pass `scope=all` to manage
+records across accounts. Deleting a task removes its schedule assignment;
+deleting a schedule leaves its tasks intact. Deleting a user also removes their
+tasks and schedule.
 
 Schedule notification preferences include an enabled toggle, selected weekdays,
 local send time, and an IANA time zone (detected from the browser by default).
@@ -177,6 +214,19 @@ The notification API is available to signed-in users:
 - `DELETE /api/notifications?id=<notificationId>` — permanently clear one
   notification; `DELETE /api/notifications` clears all of the current user's
   notifications.
+
+Regular-account task writes are scoped to the signed-in user's ID; clients
+cannot transfer task ownership. Schedule updates target only the signed-in
+user's schedule unless an administrator explicitly uses the all-record scope.
+Each user has one schedule, named **My schedule** by default; its name can be
+changed from the **My schedule** page, which also lists the schedule's assigned
+tasks. Run `.\scripts\database.ps1 update` to add the schedule-name column to an
+existing database.
+The schedule task picker exposes task titles and due dates so users can assign
+other users' tasks without gaining permission to edit them. `POST` creates
+tasks, `PUT /api/business/tasks?id=<taskId>` updates an owned task,
+`DELETE /api/business/tasks?id=<taskId>` deletes an owned task, and
+`PUT /api/business/schedules` updates the signed-in user's schedule.
 
 Administrators also see **All tasks**, **All users**, and **All schedules**
 navigation links. These pages display records across all accounts and are

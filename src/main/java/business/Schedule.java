@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.List;
 
 public class Schedule implements Serializable {
+    private String scheduleName;
     private String notificationSettings;
     private boolean notificationsEnabled;
     private List<String> notificationDays = new ArrayList<>();
@@ -17,20 +18,31 @@ public class Schedule implements Serializable {
     public Schedule() {
     }
 
+    public Schedule(String scheduleName, String notificationSettings, Map<Integer, Task> tasks, User user) {
+        this.scheduleName = scheduleName;
+        this.notificationSettings = notificationSettings;
+        this.notificationsEnabled = notificationSettings != null && !"NONE".equalsIgnoreCase(notificationSettings);
+        this.notificationDays = defaultNotificationDays(notificationSettings);
+        this.notificationTime = "09:00";
+        this.notificationTimezone = "UTC";
+        this.tasks = tasks;
+        this.user = user;
+    }
+
     public Schedule(String notificationSettings, Map<Integer, Task> tasks, User user) {
-        this(
-            notificationSettings,
-            notificationSettings != null && !"NONE".equalsIgnoreCase(notificationSettings),
-            defaultNotificationDays(notificationSettings),
-            "09:00",
-            "UTC",
-            tasks,
-            user
-        );
+        this(null, notificationSettings, tasks, user);
     }
 
     public Schedule(String notificationSettings, boolean notificationsEnabled, List<String> notificationDays,
             String notificationTime, String notificationTimezone, Map<Integer, Task> tasks, User user) {
+        this(null, notificationSettings, notificationsEnabled, notificationDays, notificationTime,
+                notificationTimezone, tasks, user);
+    }
+
+    public Schedule(String scheduleName, String notificationSettings, boolean notificationsEnabled,
+            List<String> notificationDays, String notificationTime, String notificationTimezone,
+            Map<Integer, Task> tasks, User user) {
+        this.scheduleName = scheduleName;
         this.notificationSettings = notificationSettings;
         this.notificationsEnabled = notificationsEnabled;
         this.notificationDays = notificationDays;
@@ -46,6 +58,14 @@ public class Schedule implements Serializable {
         }
 
         return List.of("MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY");
+    }
+
+    public String getScheduleName() {
+        return scheduleName;
+    }
+
+    public void setScheduleName(String scheduleName) {
+        this.scheduleName = scheduleName;
     }
 
     public String getNotificationSettings() {

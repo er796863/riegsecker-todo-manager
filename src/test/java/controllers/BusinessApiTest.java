@@ -7,8 +7,13 @@ import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+
 import business.User;
 import business.Task;
+import business.Schedule;
 import data.TodoDB;
 
 import static controllers.BusinessApi.isAdmin;
@@ -258,13 +263,13 @@ public class BusinessApiTest {
                 + "\"taskIds\":[]}");
 
         try (var database = mockStatic(TodoDB.class)) {
-            database.when(() -> updateSchedule(7, 7, "WEEKLY", true,
+            database.when(() -> updateSchedule(7, 7, null, "WEEKLY", true,
                     java.util.List.of("MONDAY", "WEDNESDAY"), "08:30", "America/Denver", java.util.List.of()))
                     .thenReturn(true);
 
             api.doPut(request, response);
 
-            database.verify(() -> updateSchedule(7, 7, "WEEKLY", true,
+            database.verify(() -> updateSchedule(7, 7, null, "WEEKLY", true,
                     java.util.List.of("MONDAY", "WEDNESDAY"), "08:30", "America/Denver", java.util.List.of()));
             assertEquals("{\"updated\":true}", responseBody.toString());
         }
@@ -293,7 +298,7 @@ public class BusinessApiTest {
         when(request.getParameter("id")).thenReturn("15");
 
         try (var database = mockStatic(TodoDB.class)) {
-            database.when(() -> deleteTask(15, 7)).thenReturn(true);
+            database.when(() -> deleteTask(15, 7)).thenReturn(TodoDB.TaskDeleteResult.DELETED);
 
             api.doDelete(request, response);
 
@@ -306,4 +311,102 @@ public class BusinessApiTest {
         when(request.getContentType()).thenReturn("application/json");
         when(request.getReader()).thenReturn(new java.io.BufferedReader(new java.io.StringReader(body)));
     }
+
+    @Test
+    public void taskCreationIgnoresClientSuppliedOwner() throws Exception {
+        when(request.getPathInfo()).thenReturn("/tasks");
+        setJsonBody("{\"userId\":1,\"taskTitle\":\"Plan project\",\"taskDescription\":\"Start now\",\"taskDateDue\":null}");
+        try (var database = mockStatic(TodoDB.class)) {
+            database.when(() -> createTask(eq(7), any(Task.class))).thenReturn(41);
+            api.doPost(request, response);
+            database.verify(() -> createTask(eq(7), any(Task.class)));
+        }
+        verify(response).setStatus(HttpServletResponse.SC_CREATED);
+        assertEquals("{\"taskId\":41}", responseBody.toString());
+    }
+
+    @Test
+    public void taskUpdatesRemainScopedToTheSessionOwner() throws Exception {
+        when(request.getPathInfo()).thenReturn("/tasks");
+        when(request.getParameter("id")).thenReturn("41");
+        setJsonBody("{\"taskTitle\":\"Updated title\",\"taskDescription\":\"Updated\",\"taskDateDue\":null}");
+        try (var database = mockStatic(TodoDB.class)) {
+            database.when(() -> TodoDB.updateTask(eq(41), eq(7), any(Task.class))).thenReturn(true);
+            api.doPut(request, response);
+            database.verify(() -> TodoDB.updateTask(eq(41), eq(7), any(Task.class)));
+            database.verify(() -> TodoDB.updateTask(eq(41), eq(1), any(Task.class)), never());
+        }
+        assertEquals("{\"updated\":true}", responseBody.toString());
+    }
+
+    @Test
+    public void scheduleUpdateUsesTheSessionUserAndAllowsSharedTasks() throws Exception {
+        when(request.getPathInfo()).thenReturn("/schedules");
+        setJsonBody("{\"userId\":1,\"scheduleName\":\" Weekly plan \","
+                + "\"notificationSettings\":\"weekly\",\"taskIds\":[8,4]}");
+        try (var database = mockStatic(TodoDB.class)) {
+            database.when(() -> updateSchedule(7, 7, "Weekly plan", "WEEKLY", List.of(8, 4)))
+                    .thenReturn(TodoDB.ScheduleUpdateResult.UPDATED);
+            api.doPut(request, response);
+            database.verify(() -> updateSchedule(7, 7, "Weekly plan", "WEEKLY", List.of(8, 4)));
+            database.verify(() -> updateSchedule(1, 7, "Weekly plan", "WEEKLY", List.of(8, 4)), never());
+        }
+        assertEquals("{\"updated\":true}", responseBody.toString());
+    }
+
+    @Test
+    public void scheduleResponseIncludesItsName() throws Exception {
+        when(request.getPathInfo()).thenReturn("/schedules");
+        when(request.getParameter("id")).thenReturn("7");
+        User user = new User(7, "jdoe", "Jane", "Doe", "jane@example.com", null, "USER");
+        Schedule schedule = new Schedule("Work week", "DAILY", Map.of(), user);
+        try (var database = mockStatic(TodoDB.class)) {
+            database.when(() -> TodoDB.selectSchedule(7, 7)).thenReturn(schedule);
+            api.doGet(request, response);
+            database.verify(() -> TodoDB.selectSchedule(7, 7));
+        }
+        assertTrue(responseBody.toString().contains("\"scheduleName\":\"Work week\""));
+    }
+
+    @Test
+    public void scheduleTaskPickerReturnsMinimalOptionsForSharedTasks() throws Exception {
+        when(request.getPathInfo()).thenReturn("/schedules/available-tasks");
+        try (var database = mockStatic(TodoDB.class)) {
+            database.when(() -> selectTasks(null)).thenReturn(Map.of(
+                    8, new Task(8, "Shared task", "private description",
+                            LocalDateTime.of(2026, 1, 1, 9, 0), null)));
+            api.doGet(request, response);
+            database.verify(() -> selectTasks(null));
+        }
+        assertTrue(responseBody.toString().contains("\"taskTitle\":\"Shared task\""));
+        assertTrue(responseBody.toString().contains("\"taskId\":8"));
+        assertFalse(responseBody.toString().contains("private description"));
+    }
+
+    @Test
+    public void scheduleTaskPickerRequiresAuthentication() throws Exception {
+        when(request.getPathInfo()).thenReturn("/schedules/available-tasks");
+        when(request.getSession(false)).thenReturn(null);
+        try (var database = mockStatic(TodoDB.class)) {
+            api.doGet(request, response);
+            database.verifyNoInteractions();
+        }
+        verify(response).setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+    }
+
+    @Test
+    public void taskDeletionIsBlockedWhenAnotherScheduleUsesIt() throws Exception {
+        when(request.getPathInfo()).thenReturn("/tasks");
+        when(request.getParameter("id")).thenReturn("41");
+        try (var database = mockStatic(TodoDB.class)) {
+            database.when(() -> TodoDB.deleteTask(41, 7))
+                    .thenReturn(TodoDB.TaskDeleteResult.ASSIGNED_TO_OTHER_USERS);
+            api.doDelete(request, response);
+            database.verify(() -> TodoDB.deleteTask(41, 7));
+        }
+        verify(response).setStatus(HttpServletResponse.SC_CONFLICT);
+        assertTrue(responseBody.toString().contains("another user"));
+        assertTrue(responseBody.toString().contains("schedule"));
+    }
+
 }

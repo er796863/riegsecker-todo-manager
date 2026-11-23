@@ -153,6 +153,12 @@ switch ($Action) {
         }
 
         Invoke-Migration "docker/mysql/migrations/005_admin_default_credentials.sql"
+        $scheduleNameColumn = Invoke-DatabaseSql "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'schedules' AND column_name = 'schedule_name'"
+        if ($scheduleNameColumn -eq "0") {
+            Invoke-Migration "docker/mysql/migrations/006_schedule_names.sql"
+        } elseif ($scheduleNameColumn -ne "1") {
+            throw "Unexpected schedules.schedule_name column state; no schedule-name migration was run."
+        }
         Invoke-Migration "docker/mysql/init/002_sample_data.sql"
         Write-Host "Database migrations are up to date."
     }

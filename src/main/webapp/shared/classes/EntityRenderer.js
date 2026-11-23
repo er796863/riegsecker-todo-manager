@@ -83,8 +83,12 @@ export class EntityRenderer {
 
 		if (this.entity === "schedules") {
 			const schedule = /** @type {ScheduleRecord} */ (record);
-			const { firstName, lastName, userName, email, role } = schedule.user;
-
+			const { firstName, lastName, userName, email, role } =
+				schedule.user;
+			const scheduleName = document.createElement("h2");
+			scheduleName.className = "schedule-name";
+			scheduleName.textContent = schedule.scheduleName;
+			this.results.append(scheduleName);
 			this.results.append(
 				this.createScheduleDetailCard(
 					`${firstName} ${lastName} (@${userName})`,
@@ -97,7 +101,7 @@ export class EntityRenderer {
 				this.results.append(
 					this.createScheduleDetailCard(
 						task.taskTitle,
-						`Due: ${this.displayValue(task.taskDateDue)}`,
+						`Due: ${this.displayValue(task.taskDateDue, "taskDateDue")}`,
 						task,
 					),
 				);
@@ -117,7 +121,11 @@ export class EntityRenderer {
 			);
 		} else {
 			const article = document.createElement("article");
-			this.addDetails(article, record);
+			if (this.entity === "users") {
+				this.addUserDetails(article, /** @type {UserRecord} */ (record));
+			} else {
+				this.addDetails(article, record);
+			}
 			this.results.append(article);
 		}
 
@@ -142,7 +150,16 @@ export class EntityRenderer {
 		summaryElement.textContent = summary;
 		article.append(summaryElement);
 
-		this.addDetails(article, record);
+		if ("userId" in record && "userName" in record) {
+			this.addDetailEntries(article, [["userId", record.userId]]);
+		} else if ("taskId" in record) {
+			const task = /** @type {TaskRecord} */ (record);
+			this.addDetailEntries(article, Object.entries(task).filter(
+				([key]) => key !== "taskTitle" && key !== "taskDateDue",
+			));
+		} else if ("notificationSettings" in record) {
+			this.addDetails(article, record);
+		}
 		return article;
 	}
 
@@ -156,7 +173,7 @@ export class EntityRenderer {
 		group.className = "schedule-group";
 
 		const heading = document.createElement("summary");
-		heading.textContent = `${firstName} ${lastName} (@${userName})`;
+		heading.textContent = `${schedule.scheduleName} — ${firstName} ${lastName} (@${userName})`;
 		group.append(heading);
 
 		const cards = document.createElement("div");
@@ -268,7 +285,10 @@ export class EntityRenderer {
 		}
 
 		if (this.entity === "tasks") {
-			return `Due: ${this.displayValue(/** @type {TaskRecord} */ (record).taskDateDue)}`;
+			return `Due: ${this.displayValue(
+				/** @type {TaskRecord} */ (record).taskDateDue,
+				"taskDateDue",
+			)}`;
 		}
 
 		return `Notification: ${/** @type {ScheduleRecord} */ (record).notificationSettings}`;
@@ -303,14 +323,37 @@ export class EntityRenderer {
 	 * @param {object} record
 	 */
 	addDetails(container, record) {
+		this.addDetailEntries(container, Object.entries(record));
+	}
+
+	/**
+	 * @param {HTMLElement} container
+	 * @param {UserRecord} user
+	 */
+	addUserDetails(container, user) {
+		const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ");
+		this.addDetailEntries(container, [
+			["userId", user.userId],
+			["name", fullName],
+			["userName", user.userName],
+			["email", user.email],
+			["role", user.role],
+		]);
+	}
+
+	/**
+	 * @param {HTMLElement} container
+	 * @param {Array<[string, unknown]>} entries
+	 */
+	addDetailEntries(container, entries) {
 		const details = document.createElement("dl");
 
-		for (const [key, value] of Object.entries(record)) {
+		for (const [key, value] of entries) {
 			const term = document.createElement("dt");
 			const description = document.createElement("dd");
 
 			term.textContent = this.fieldLabel(key);
-			description.textContent = this.displayValue(value);
+			description.textContent = this.displayValue(value, key);
 
 			details.append(term, description);
 		}
@@ -320,14 +363,29 @@ export class EntityRenderer {
 
 	/**
 	 * @param {unknown} value
+	 * @param {string} [fieldName]
 	 * @returns {string}
 	 */
-	displayValue(value) {
+	displayValue(value, fieldName = "") {
 		if (value === null || value === undefined || value === "") {
-			return "-";
+			return "Not set";
 		}
-
-		return JSON.stringify(value) ?? "-";
+		if (typeof value === "string") {
+			if (fieldName === "taskDateCreated" || fieldName === "taskDateDue") {
+				const date = new Date(value);
+				if (!Number.isNaN(date.getTime())) {
+					return new Intl.DateTimeFormat(undefined, {
+						dateStyle: "medium",
+						timeStyle: "short",
+					}).format(date);
+				}
+			}
+			return value;
+		}
+		if (typeof value === "number" || typeof value === "boolean") {
+			return String(value);
+		}
+		return JSON.stringify(value) ?? "Not set";
 	}
 
 	/**
@@ -335,6 +393,25 @@ export class EntityRenderer {
 	 * @returns {string}
 	 */
 	fieldLabel(name) {
+		/** @type {Record<string, string>} */
+		const labels = {
+			taskId: "Task ID",
+			taskTitle: "Title",
+			taskDescription: "Description",
+			taskDateCreated: "Created",
+			taskDateDue: "Due",
+			userId: "User ID",
+			userName: "Username",
+			name: "Full name",
+			scheduleName: "Schedule name",
+			firstName: "First name",
+			lastName: "Last name",
+			notificationSettings: "Notification settings",
+		};
+		if (labels[name]) {
+			return labels[name];
+		}
+
 		let label = "";
 
 		for (let i = 0; i < name.length; i++) {

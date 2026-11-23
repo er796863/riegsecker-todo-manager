@@ -96,6 +96,7 @@ export async function initializeAccountNavigation(contextPath) {
 	setAdminNavigation(payload.user);
 
 	const greeting = document.createElement("span");
+	greeting.dataset.userGreeting = "";
 	greeting.textContent = `Signed in as ${payload.user.firstName} ${payload.user.lastName}`;
 
 	initializeNotificationsWidget(contextPath, navigation);

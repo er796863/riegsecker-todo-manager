@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE TABLE IF NOT EXISTS schedules (
     schedule_id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     user_id INT UNSIGNED NOT NULL,
+    schedule_name VARCHAR(100) NOT NULL DEFAULT 'My schedule',
     notification_setting VARCHAR(30) NOT NULL DEFAULT 'NONE',
     notification_enabled TINYINT(1) NOT NULL DEFAULT 0,
     notification_days TINYINT UNSIGNED NOT NULL DEFAULT 127,

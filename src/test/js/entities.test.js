@@ -233,7 +233,7 @@ describe("entity pages", () => {
     expect(document.querySelector("#status b")).toBeNull();
   });
 
-  it("loads details from the page query and renders null values as a dash", async () => {
+  it("loads task details with plain strings, localized dates, and a readable empty value", async () => {
     setPage({ mode: "detail", label: "Task" });
     history.replaceState(null, "", "/tasks/detail.html?id=4");
     vi.stubGlobal(
@@ -244,17 +244,58 @@ describe("entity pages", () => {
           taskId: 4,
           taskTitle: "Plan tests",
           taskDescription: null,
+          taskDateCreated: "2026-10-10T09:00",
+          taskDateDue: "2026-10-16T12:00",
         }),
       }),
     );
 
     await loadEntitiesPage();
 
-    expect(document.querySelector("#results").textContent).toContain("Task Title");
-    expect(document.querySelector("#results").textContent).toContain("-");
+    const details = document.querySelector("#results").textContent;
+    const formattedCreated = new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date("2026-10-10T09:00"));
+    const formattedDue = new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date("2026-10-16T12:00"));
+    expect(details).toContain("TitlePlan tests");
+    expect(details).not.toContain('"Plan tests"');
+    expect(details).toContain("DescriptionNot set");
+    expect(details).toContain(`Created${formattedCreated}`);
+    expect(details).toContain(`Due${formattedDue}`);
     expect(document.querySelector("#status").textContent).toBe(
       "Task details loaded.",
     );
+  });
+
+  it("combines a user's first and last names on the user details page", async () => {
+    setPage({ entity: "users", mode: "detail", label: "User" });
+    history.replaceState(null, "", "/users/detail.html?id=3");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          userId: 3,
+          userName: "jdoe",
+          firstName: "Jane",
+          lastName: "Doe",
+          email: "jane@example.com",
+          role: "USER",
+        }),
+      }),
+    );
+
+    await loadEntitiesPage();
+
+    const details = document.querySelector("#results").textContent;
+    expect(details).toContain("Full nameJane Doe");
+    expect(details).toContain("Usernamejdoe");
+    expect(details).not.toContain("First name");
+    expect(details).not.toContain('"jdoe"');
   });
 
   it("groups schedule tasks under the associated user", async () => {
@@ -265,6 +306,7 @@ describe("entity pages", () => {
         ok: true,
         json: async () => ({
           3: {
+            scheduleName: "Weekly plan",
             notificationSettings: "DAILY",
             user: { userId: 3, firstName: "Jane", lastName: "Doe", userName: "jdoe" },
             tasks: {
@@ -278,7 +320,7 @@ describe("entity pages", () => {
     await loadEntitiesPage();
 
     expect(document.querySelector("#results summary").textContent).toBe(
-      "Jane Doe (@jdoe)",
+      "Weekly plan — Jane Doe (@jdoe)",
     );
     expect(document.querySelector("#results h2").textContent).toBe("Review");
     expect(document.querySelector("#results a").getAttribute("href")).toBe(
@@ -379,6 +421,7 @@ describe("entity pages", () => {
       vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          scheduleName: "Project week",
           notificationSettings: "DAILY",
           user: {
             userId: 3,
@@ -406,11 +449,17 @@ describe("entity pages", () => {
     const cards = document.querySelectorAll(
       "#results article.schedule-detail-card",
     );
+    expect(document.querySelector("#results .schedule-name").textContent).toBe("Project week");
     expect(cards).toHaveLength(3);
     expect(cards[0].querySelector("h2").textContent).toBe("Jane Doe (@jdoe)");
     expect(cards[0].textContent).toContain("jane@example.com · USER");
     expect(cards[1].querySelector("h2").textContent).toBe("Review");
-    expect(cards[1].textContent).toContain('Due: "2026-10-16T12:00"');
+    const formattedDue = new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date("2026-10-16T12:00"));
+    expect(cards[1].textContent).toContain(`Due: ${formattedDue}`);
+    expect(cards[1].textContent).toContain("Review the release");
     expect(cards[2].querySelector("h2").textContent).toBe(
       "Notification settings",
     );

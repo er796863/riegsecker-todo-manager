@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const accountScript = "../../main/webapp/shared/account.js";
 const accountNavigationScript =
@@ -77,6 +79,44 @@ describe("account forms", () => {
     expect(document.querySelector("[data-admin-only]").hidden).toBe(false);
   });
 
+  it("hides all-record home-page cards for non-admin users", async () => {
+    const homePageHtml = readFileSync(
+      resolve(process.cwd(), "src", "main", "webapp", "homePage", "index.html"),
+      "utf8",
+    );
+    const homePage = new DOMParser().parseFromString(
+      homePageHtml,
+      "text/html",
+    );
+    document.head.innerHTML = homePage.head.innerHTML;
+    document.body.innerHTML = homePage.body.innerHTML;
+    document.body.className = homePage.body.className;
+    const styles = document.createElement("style");
+    styles.textContent = readFileSync(
+      resolve(process.cwd(), "src", "main", "webapp", "shared", "entities.css"),
+      "utf8",
+    );
+    document.head.append(styles);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        authenticated: true,
+        user: { firstName: "Jane", lastName: "Doe", role: "USER" },
+      }),
+    }));
+
+    const { initializeAccountNavigation } = await import(accountNavigationScript);
+    await initializeAccountNavigation("/todo");
+
+    const adminLinks = [...document.querySelectorAll("[data-admin-only]")];
+    expect(adminLinks).toHaveLength(3);
+    expect(adminLinks.every((link) => link.hidden)).toBe(true);
+    expect(adminLinks.every((link) => getComputedStyle(link).display === "none")).toBe(true);
+    expect([...document.querySelectorAll(".site-links a")].map((link) => link.textContent))
+      .toEqual(["Tasks", "My profile", "My schedule"]);
+    styles.remove();
+  });
+
   it("loads scheduled notifications and supports read and clear actions", async () => {
     document.body.innerHTML = `<header data-global-header></header>`;
     let notifications = [{
@@ -123,7 +163,6 @@ describe("account forms", () => {
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal("fetch", fetch);
-
     const { initializeAccountNavigation } = await import(accountNavigationScript);
     await initializeAccountNavigation("/todo");
 

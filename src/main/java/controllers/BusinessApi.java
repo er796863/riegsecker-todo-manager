@@ -19,6 +19,9 @@ import java.time.DayOfWeek;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -36,13 +39,16 @@ import static data.TodoDB.updateManagedUser;
 
 public class BusinessApi extends HttpServlet {
     private static final Gson GSON = new Gson();
+    private static final int MAX_REQUEST_SIZE = 8192;
     private static final Set<String> ROLES = Set.of("USER", "ADMIN");
+    private static final Set<String> NOTIFICATION_SETTINGS = Set.of("NONE", "DAILY", "WEEKLY");
     private static final Set<String> WEEKDAYS = Set.of(
             "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY");
 
     private static final String TASKS = "tasks";
     private static final String USERS = "users";
     private static final String SCHEDULES = "schedules";
+    private static final String AVAILABLE_SCHEDULE_TASKS = "schedules/available-tasks";
 
     private static final class TaskRequest {
         private String taskTitle;
@@ -52,6 +58,8 @@ public class BusinessApi extends HttpServlet {
     }
 
     private static final class ScheduleRequest {
+        private String scheduleName;
+        private String notificationSettings;
         private Boolean notificationsEnabled;
         private List<String> notificationDays;
         private String notificationTime;
@@ -79,15 +87,22 @@ public class BusinessApi extends HttpServlet {
         String path = request.getPathInfo();
         String entity = path == null ? "" : determineEntityFromPath(path);
         String search = request.getParameter("search");
-
+        if (AVAILABLE_SCHEDULE_TASKS.equals(entity)) {
+            User currentUser = AccountApi.getSessionUser(request);
+            if (currentUser == null || currentUser.getUserId() == null) {
+                sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Sign in to view records");
+                return;
+            }
+            getAvailableScheduleTasks(response);
+            return;
+        }
         if (!TASKS.equals(entity) && !USERS.equals(entity) && !SCHEDULES.equals(entity)) {
             sendError(response, HttpServletResponse.SC_NOT_FOUND, "Unknown resource");
             return;
         }
 
-        User currentUser = getSessionUser(request);
-
-        if (currentUser == null) {
+        User currentUser = AccountApi.getSessionUser(request);
+        if (currentUser == null || currentUser.getUserId() == null) {
             sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Sign in to view records");
             return;
         }
@@ -192,7 +207,12 @@ public class BusinessApi extends HttpServlet {
             return;
         }
 
-        Integer id = parseId(request, response);
+        Integer id;
+        if (SCHEDULES.equals(entity) && request.getParameter("id") == null) {
+            id = currentUser.getUserId();
+        } else {
+            id = parseId(request, response);
+        }
 
         if (id == null) {
             return;
@@ -268,7 +288,7 @@ public class BusinessApi extends HttpServlet {
 
     private User requireUser(HttpServletRequest request, HttpServletResponse response) {
         User currentUser = getSessionUser(request);
-        if (currentUser == null) {
+        if (currentUser == null || currentUser.getUserId() == null) {
             sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "Sign in to manage records");
         }
 
@@ -428,12 +448,13 @@ public class BusinessApi extends HttpServlet {
             return;
         }
 
-        if (!TodoDB.deleteTask(id, scope.ownerId())) {
-            sendError(response, HttpServletResponse.SC_NOT_FOUND, "Task not found");
-            return;
+        TodoDB.TaskDeleteResult result = TodoDB.deleteTask(id, scope.ownerId());
+        switch (result) {
+            case DELETED -> sendJson(response, Map.of("deleted", true));
+            case NOT_FOUND -> sendError(response, HttpServletResponse.SC_NOT_FOUND, "Task not found");
+            case ASSIGNED_TO_OTHER_USERS -> sendError(response, HttpServletResponse.SC_CONFLICT,
+                    "This task is assigned to another user's schedule and cannot be deleted");
         }
-
-        sendJson(response, Map.of("deleted", true));
     }
 
     private void createSchedule(HttpServletRequest request, HttpServletResponse response, User currentUser)
@@ -489,6 +510,38 @@ public class BusinessApi extends HttpServlet {
             return;
         }
 
+        if (body.notificationsEnabled == null) {
+            String scheduleName = body.scheduleName == null ? "" : body.scheduleName.trim();
+            String notificationSettings = body.notificationSettings == null
+                    ? "" : body.notificationSettings.trim().toUpperCase(Locale.ROOT);
+            if (scheduleName.isEmpty() || scheduleName.length() > 100) {
+                sendError(response, HttpServletResponse.SC_BAD_REQUEST,
+                        "Schedule name is required and must be no longer than 100 characters");
+                return;
+            }
+            if (!NOTIFICATION_SETTINGS.contains(notificationSettings)) {
+                sendError(response, HttpServletResponse.SC_BAD_REQUEST,
+                        "Notification settings must be NONE, DAILY, or WEEKLY");
+                return;
+            }
+            String taskIdsError = validateTaskIds(body.taskIds);
+            if (taskIdsError != null || body.taskIds == null) {
+                sendError(response, HttpServletResponse.SC_BAD_REQUEST,
+                        taskIdsError == null ? "Task IDs are required" : taskIdsError);
+                return;
+            }
+
+            TodoDB.ScheduleUpdateResult result = TodoDB.updateSchedule(
+                    userId, scope.ownerId(), scheduleName, notificationSettings, body.taskIds);
+            switch (result) {
+                case UPDATED -> sendJson(response, Map.of("updated", true));
+                case NOT_FOUND -> sendError(response, HttpServletResponse.SC_NOT_FOUND, "Schedule not found");
+                case UNKNOWN_TASK -> sendError(response, HttpServletResponse.SC_BAD_REQUEST,
+                        "One or more selected tasks do not exist");
+            }
+            return;
+        }
+
         String error = validateSchedule(body);
         if (error != null) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, error);
@@ -502,7 +555,7 @@ public class BusinessApi extends HttpServlet {
         }
 
         List<String> notificationDays = normalizeNotificationDays(body.notificationDays);
-        if (!TodoDB.updateSchedule(userId, scope.ownerId(),
+        if (!TodoDB.updateSchedule(userId, scope.ownerId(), body.scheduleName,
                 notificationSetting(body.notificationsEnabled, notificationDays), body.notificationsEnabled,
                 notificationDays, body.notificationTime, body.notificationTimezone.trim(), body.taskIds)) {
             sendError(response, HttpServletResponse.SC_NOT_FOUND, "Schedule not found");
@@ -633,6 +686,10 @@ public class BusinessApi extends HttpServlet {
     }
 
     private static String validateSchedule(ScheduleRequest body) {
+        if (body.scheduleName != null
+                && (body.scheduleName.trim().isEmpty() || body.scheduleName.trim().length() > 100)) {
+            return "Schedule name is required and must be no longer than 100 characters";
+        }
         if (body.notificationsEnabled == null) {
             return "Choose whether notifications are enabled";
         }
@@ -748,20 +805,39 @@ public class BusinessApi extends HttpServlet {
                 && contentType.split(";", 2)[0].trim().equalsIgnoreCase("application/json");
     }
 
+    private static String path(HttpServletRequest request) {
+        String path = request.getPathInfo();
+        return path == null ? "" : determineEntityFromPath(path);
+    }
+
     private void handleMutationError(String entity, HttpServletResponse response, Exception exception) {
         if (exception instanceof IllegalArgumentException) {
             sendError(response, HttpServletResponse.SC_BAD_REQUEST, exception.getMessage());
             return;
         }
-
         if (exception instanceof SQLException sqlException && sqlException.getSQLState() != null
                 && sqlException.getSQLState().startsWith("23")) {
             sendError(response, HttpServletResponse.SC_CONFLICT, "A record with these values already exists");
             return;
         }
-
         getServletContext().log("Unable to modify " + entity + " in the database", exception);
         sendError(response, HttpServletResponse.SC_INTERNAL_SERVER_ERROR, "Unable to modify records");
+    }
+
+    private void getAvailableScheduleTasks(HttpServletResponse response) {
+        try {
+            List<Map<String, Object>> options = new ArrayList<>();
+            TodoDB.selectTasks(null).values().forEach(task -> {
+                Map<String, Object> option = new LinkedHashMap<>();
+                option.put("taskId", task.getTaskId());
+                option.put("taskTitle", task.getTaskTitle());
+                option.put("taskDateDue", format(task.getTaskDateDue()));
+                options.add(option);
+            });
+            sendJson(response, options);
+        } catch (NamingException | SQLException exception) {
+            handleDatabaseError(TASKS, response, exception);
+        }
     }
 
     static boolean isAdmin(User user) {
@@ -886,6 +962,7 @@ public class BusinessApi extends HttpServlet {
 
     private static Map<String, Object> toJson(Schedule schedule) {
         Map<String, Object> result = new LinkedHashMap<>();
+        result.put("scheduleName", schedule.getScheduleName());
         result.put("notificationSettings", schedule.getNotificationSettings());
         result.put("notificationsEnabled", schedule.isNotificationsEnabled());
         result.put("notificationDays", schedule.getNotificationDays());
